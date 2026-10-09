@@ -67,6 +67,7 @@ type SettingsValuesResponse struct {
 	EmptyResponseRetry               bool                  `json:"empty_response_retry"`
 	AffinityTTL                      int64                 `json:"affinity_ttl"`
 	AffinityCapacity                 int                   `json:"affinity_capacity"`
+	CredentialConcurrencyLimit       int                   `json:"credential_concurrency_limit"`
 	ValidationInterval               int64                 `json:"validation_interval"`
 	RequestLogRetentionDays          int                   `json:"request_log_retention_days"`
 	ModelsDevAutoSyncEnabled         bool                  `json:"models_dev_auto_sync_enabled"`
@@ -481,6 +482,7 @@ func mapSettingsResponse(
 			DefaultGroupConcurrencyLimit:     settings.DefaultGroupConcurrencyLimit,
 			AffinityTTL:                      durationSeconds(settings.AffinityTTL),
 			AffinityCapacity:                 settings.AffinityCapacity,
+			CredentialConcurrencyLimit:       settings.CredentialConcurrencyLimit,
 			ValidationInterval:               durationSeconds(settings.ValidationInterval),
 			RequestLogRetentionDays:          settings.RequestLogRetentionDays,
 			ModelsDevAutoSyncEnabled:         modelsDevAutoSyncEnabled,

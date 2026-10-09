@@ -34,6 +34,7 @@ const (
 	SettingEmptyResponseRetry               = "empty_response_retry"
 	SettingAffinityTTL                      = "affinity_ttl"
 	SettingAffinityCapacity                 = "affinity_capacity"
+	SettingCredentialConcurrencyLimit       = "credential_concurrency_limit"
 	SettingValidationInterval               = "validation_interval"
 	SettingRequestLogRetentionDays          = "request_log_retention_days"
 	SettingModelsDevAutoSyncEnabled         = "models_dev_auto_sync_enabled"
@@ -61,7 +62,10 @@ const (
 	maxRequestLogRetentionDays     = 365
 	defaultAffinityCapacity        = 10_000
 	maxAffinityCapacity            = 1_000_000
-	maxJSONSafeInteger             = int64(1<<53 - 1)
+	// 每凭证并发上限默认值 = 实测厂商硬顶(≈8, code 1302)减 2 余量; 0 表示不限制。
+	defaultCredentialConcurrencyLimit = 6
+	maxCredentialConcurrencyLimit     = 64
+	maxJSONSafeInteger                = int64(1<<53 - 1)
 )
 
 type RuntimeSettings struct {
@@ -83,6 +87,7 @@ type RuntimeSettings struct {
 	EmptyResponseRetry               bool
 	AffinityTTL                      time.Duration
 	AffinityCapacity                 int
+	CredentialConcurrencyLimit       int
 	ValidationInterval               time.Duration
 	RequestLogRetentionDays          int
 	ModelsDevAutoSyncEnabled         bool
@@ -102,24 +107,25 @@ type ResolvedGroupSettings struct {
 
 func DefaultRuntimeSettings() RuntimeSettings {
 	return RuntimeSettings{
-		FirstByteTimeout:          120 * time.Second,
-		RequestTimeout:            600 * time.Second,
-		StreamIdleTimeout:         300 * time.Second,
-		HeaderRules:               HeaderRules{Set: map[string]string{}},
-		CORS:                      defaultCORSConfig(),
-		ResponseHeaderRules:       HeaderRules{Set: map[string]string{}},
-		RetryCount:                2,
-		RouteStrategy:             RouteStrategyNativeFirst,
-		BlacklistThreshold:        3,
-		AffinityEnabled:           true,
-		CodexLiveMode:             CodexLiveDirect,
-		ResponsesWebsocketEnabled: true,
-		EmptyResponseRetry:        false,
-		AffinityTTL:               time.Hour,
-		AffinityCapacity:          defaultAffinityCapacity,
-		ValidationInterval:        10 * time.Minute,
-		RequestLogRetentionDays:   defaultRequestLogRetentionDays,
-		ModelsDevAutoSyncEnabled:  true,
+		FirstByteTimeout:           120 * time.Second,
+		RequestTimeout:             600 * time.Second,
+		StreamIdleTimeout:          300 * time.Second,
+		HeaderRules:                HeaderRules{Set: map[string]string{}},
+		CORS:                       defaultCORSConfig(),
+		ResponseHeaderRules:        HeaderRules{Set: map[string]string{}},
+		RetryCount:                 2,
+		RouteStrategy:              RouteStrategyNativeFirst,
+		BlacklistThreshold:         3,
+		AffinityEnabled:            true,
+		CodexLiveMode:              CodexLiveDirect,
+		ResponsesWebsocketEnabled:  true,
+		EmptyResponseRetry:         false,
+		AffinityTTL:                time.Hour,
+		AffinityCapacity:           defaultAffinityCapacity,
+		CredentialConcurrencyLimit: defaultCredentialConcurrencyLimit,
+		ValidationInterval:         10 * time.Minute,
+		RequestLogRetentionDays:    defaultRequestLogRetentionDays,
+		ModelsDevAutoSyncEnabled:   true,
 	}
 }
 
@@ -141,6 +147,7 @@ func IsRuntimeSettingKey(key string) bool {
 		SettingEmptyResponseRetry,
 		SettingAffinityTTL,
 		SettingAffinityCapacity,
+		SettingCredentialConcurrencyLimit,
 		SettingValidationInterval,
 		SettingRequestLogRetentionDays,
 		SettingModelsDevAutoSyncEnabled:
@@ -257,6 +264,12 @@ func ResolveRuntimeSettings(settings config.Settings) (RuntimeSettings, error) {
 				return RuntimeSettings{}, err
 			}
 			resolved.AffinityCapacity = capacity
+		case SettingCredentialConcurrencyLimit:
+			limit, err := wholeNumberInRange(key, value, 0, maxCredentialConcurrencyLimit)
+			if err != nil {
+				return RuntimeSettings{}, err
+			}
+			resolved.CredentialConcurrencyLimit = limit
 		case SettingValidationInterval:
 			seconds, err := positiveWholeSeconds(key, value)
 			if err != nil {
@@ -417,6 +430,9 @@ func ValidateRuntimeSetting(key string, value any) error {
 		return err
 	case SettingAffinityCapacity:
 		_, err := wholeNumberInRange(key, value, 1, maxAffinityCapacity)
+		return err
+	case SettingCredentialConcurrencyLimit:
+		_, err := wholeNumberInRange(key, value, 0, maxCredentialConcurrencyLimit)
 		return err
 	case SettingRequestLogRetentionDays:
 		_, err := wholeNumberInRange(

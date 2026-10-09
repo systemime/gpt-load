@@ -53,18 +53,19 @@ func TestCompilePublishesDefaultRuntimeSettingsWithoutGroups(t *testing.T) {
 			AllowedHeaders: []string{"*"},
 			MaxAgeSeconds:  600,
 		},
-		ResponseHeaderRules:       HeaderRules{Set: map[string]string{}},
-		RetryCount:                2,
-		RouteStrategy:             RouteStrategyNativeFirst,
-		BlacklistThreshold:        3,
-		AffinityEnabled:           true,
-		CodexLiveMode:             CodexLiveDirect,
-		ResponsesWebsocketEnabled: true,
-		AffinityTTL:               time.Hour,
-		AffinityCapacity:          10_000,
-		ValidationInterval:        10 * time.Minute,
-		RequestLogRetentionDays:   7,
-		ModelsDevAutoSyncEnabled:  true,
+		ResponseHeaderRules:        HeaderRules{Set: map[string]string{}},
+		RetryCount:                 2,
+		RouteStrategy:              RouteStrategyNativeFirst,
+		BlacklistThreshold:         3,
+		AffinityEnabled:            true,
+		CodexLiveMode:              CodexLiveDirect,
+		ResponsesWebsocketEnabled:  true,
+		AffinityTTL:                time.Hour,
+		AffinityCapacity:           10_000,
+		CredentialConcurrencyLimit: 6,
+		ValidationInterval:         10 * time.Minute,
+		RequestLogRetentionDays:    7,
+		ModelsDevAutoSyncEnabled:   true,
 	}
 	if !reflect.DeepEqual(snapshot.Settings, want) {
 		t.Fatalf("Settings = %#v, want %#v", snapshot.Settings, want)
@@ -345,6 +346,39 @@ func TestAffinitySettingsArePublicAndGroupEnableIsOverridable(t *testing.T) {
 	for _, key := range []string{"affinity_ttl", "affinity_capacity"} {
 		if _, err := ResolveGroupRuntimeSettings(global, config.Settings{key: 1}); err == nil {
 			t.Fatalf("group accepted system-only %s", key)
+		}
+	}
+}
+
+func TestCredentialConcurrencyLimitSetting(t *testing.T) {
+	if !IsRuntimeSettingKey(SettingCredentialConcurrencyLimit) {
+		t.Fatal("IsRuntimeSettingKey(credential_concurrency_limit) = false")
+	}
+	for key, value := range map[string]any{
+		SettingCredentialConcurrencyLimit: json.Number("0"),
+	} {
+		if err := ValidateRuntimeSetting(key, value); err != nil {
+			t.Errorf("ValidateRuntimeSetting(%q) error = %v", key, err)
+		}
+	}
+	resolved, err := ResolveRuntimeSettings(config.Settings{
+		SettingCredentialConcurrencyLimit: json.Number("12"),
+	})
+	if err != nil {
+		t.Fatalf("ResolveRuntimeSettings() error = %v", err)
+	}
+	if resolved.CredentialConcurrencyLimit != 12 {
+		t.Fatalf("CredentialConcurrencyLimit = %d, want 12", resolved.CredentialConcurrencyLimit)
+	}
+	unlimited, err := ResolveRuntimeSettings(config.Settings{
+		SettingCredentialConcurrencyLimit: json.Number("0"),
+	})
+	if err != nil || unlimited.CredentialConcurrencyLimit != 0 {
+		t.Fatalf("unlimited limit = %d, %v; want 0", unlimited.CredentialConcurrencyLimit, err)
+	}
+	for _, value := range []any{json.Number("-1"), json.Number("65"), json.Number("1.5"), "6"} {
+		if err := ValidateRuntimeSetting(SettingCredentialConcurrencyLimit, value); err == nil {
+			t.Errorf("ValidateRuntimeSetting accepted invalid value %#v", value)
 		}
 	}
 }
