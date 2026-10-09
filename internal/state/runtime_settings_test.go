@@ -63,6 +63,8 @@ func TestCompilePublishesDefaultRuntimeSettingsWithoutGroups(t *testing.T) {
 		AffinityTTL:                time.Hour,
 		AffinityCapacity:           10_000,
 		CredentialConcurrencyLimit: 6,
+		CredentialQueueEnabled:     true,
+		CredentialQueueTimeout:     30 * time.Second,
 		ValidationInterval:         10 * time.Minute,
 		RequestLogRetentionDays:    7,
 		ModelsDevAutoSyncEnabled:   true,

@@ -104,6 +104,8 @@ const sectionFields: Record<SectionID, readonly SettingKey[]> = {
     'affinity_ttl',
     'affinity_capacity',
     'credential_concurrency_limit',
+    'credential_queue_enabled',
+    'credential_queue_timeout',
   ],
   connection: [
     'global_concurrency_limit',
@@ -156,6 +158,7 @@ const affinityNumbers: readonly SettingNumber[] = [
   'affinity_ttl',
   'affinity_capacity',
   'credential_concurrency_limit',
+  'credential_queue_timeout',
 ]
 const headerKeys = ['header_rules', 'response_header_rules'] as const
 const corsLists = ['allowed_methods', 'allowed_headers', 'exposed_headers'] as const
@@ -502,6 +505,20 @@ onScopeDispose(() => {
                     v-model="draft.affinity_enabled"
                     :label="t('settingsForm.fields.affinity_enabled')"
                     :disabled="disabled('affinity_enabled')"
+                  />
+                </SettingItem>
+                <SettingItem
+                  v-if="matches('credential_queue_enabled')"
+                  v-bind="settingItem('credential_queue_enabled')"
+                  :description="t('settingsForm.hints.credential_queue_enabled')"
+                  @reset="restore('credential_queue_enabled')"
+                  @undo="undoRestore('credential_queue_enabled')"
+                >
+                  <AppSwitch
+                    id="settings-credential_queue_enabled"
+                    v-model="draft.credential_queue_enabled"
+                    :label="t('settingsForm.fields.credential_queue_enabled')"
+                    :disabled="disabled('credential_queue_enabled')"
                   />
                 </SettingItem>
                 <div v-if="affinityNumbers.some(matches)" class="modern-settings-number-grid">

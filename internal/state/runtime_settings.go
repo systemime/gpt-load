@@ -35,6 +35,8 @@ const (
 	SettingAffinityTTL                      = "affinity_ttl"
 	SettingAffinityCapacity                 = "affinity_capacity"
 	SettingCredentialConcurrencyLimit       = "credential_concurrency_limit"
+	SettingCredentialQueueEnabled           = "credential_queue_enabled"
+	SettingCredentialQueueTimeout           = "credential_queue_timeout"
 	SettingValidationInterval               = "validation_interval"
 	SettingRequestLogRetentionDays          = "request_log_retention_days"
 	SettingModelsDevAutoSyncEnabled         = "models_dev_auto_sync_enabled"
@@ -65,7 +67,12 @@ const (
 	// 每凭证并发上限默认值 = 实测厂商硬顶(≈8, code 1302)减 2 余量; 0 表示不限制。
 	defaultCredentialConcurrencyLimit = 6
 	maxCredentialConcurrencyLimit     = 64
-	maxJSONSafeInteger                = int64(1<<53 - 1)
+	// CredentialQueueSlack 是组预算浮动: 全池达 cap 后每凭证最多再放行这么多, 超出进入排队。
+	CredentialQueueSlack          = 2
+	minCredentialQueueTimeout     = 1
+	maxCredentialQueueTimeout     = 600
+	defaultCredentialQueueTimeout = 30
+	maxJSONSafeInteger            = int64(1<<53 - 1)
 )
 
 type RuntimeSettings struct {
@@ -88,6 +95,8 @@ type RuntimeSettings struct {
 	AffinityTTL                      time.Duration
 	AffinityCapacity                 int
 	CredentialConcurrencyLimit       int
+	CredentialQueueEnabled           bool
+	CredentialQueueTimeout           time.Duration
 	ValidationInterval               time.Duration
 	RequestLogRetentionDays          int
 	ModelsDevAutoSyncEnabled         bool
@@ -123,6 +132,8 @@ func DefaultRuntimeSettings() RuntimeSettings {
 		AffinityTTL:                time.Hour,
 		AffinityCapacity:           defaultAffinityCapacity,
 		CredentialConcurrencyLimit: defaultCredentialConcurrencyLimit,
+		CredentialQueueEnabled:     true,
+		CredentialQueueTimeout:     time.Duration(defaultCredentialQueueTimeout) * time.Second,
 		ValidationInterval:         10 * time.Minute,
 		RequestLogRetentionDays:    defaultRequestLogRetentionDays,
 		ModelsDevAutoSyncEnabled:   true,
@@ -148,6 +159,8 @@ func IsRuntimeSettingKey(key string) bool {
 		SettingAffinityTTL,
 		SettingAffinityCapacity,
 		SettingCredentialConcurrencyLimit,
+		SettingCredentialQueueEnabled,
+		SettingCredentialQueueTimeout,
 		SettingValidationInterval,
 		SettingRequestLogRetentionDays,
 		SettingModelsDevAutoSyncEnabled:
@@ -270,6 +283,18 @@ func ResolveRuntimeSettings(settings config.Settings) (RuntimeSettings, error) {
 				return RuntimeSettings{}, err
 			}
 			resolved.CredentialConcurrencyLimit = limit
+		case SettingCredentialQueueEnabled:
+			value, err := strictBoolean(key, value)
+			if err != nil {
+				return RuntimeSettings{}, err
+			}
+			resolved.CredentialQueueEnabled = value
+		case SettingCredentialQueueTimeout:
+			seconds, err := wholeNumberInRange(key, value, minCredentialQueueTimeout, maxCredentialQueueTimeout)
+			if err != nil {
+				return RuntimeSettings{}, err
+			}
+			resolved.CredentialQueueTimeout = time.Duration(seconds) * time.Second
 		case SettingValidationInterval:
 			seconds, err := positiveWholeSeconds(key, value)
 			if err != nil {
@@ -433,6 +458,12 @@ func ValidateRuntimeSetting(key string, value any) error {
 		return err
 	case SettingCredentialConcurrencyLimit:
 		_, err := wholeNumberInRange(key, value, 0, maxCredentialConcurrencyLimit)
+		return err
+	case SettingCredentialQueueEnabled:
+		_, err := strictBoolean(key, value)
+		return err
+	case SettingCredentialQueueTimeout:
+		_, err := wholeNumberInRange(key, value, minCredentialQueueTimeout, maxCredentialQueueTimeout)
 		return err
 	case SettingRequestLogRetentionDays:
 		_, err := wholeNumberInRange(

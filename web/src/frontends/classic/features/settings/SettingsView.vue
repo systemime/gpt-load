@@ -44,6 +44,7 @@ import {
   createSettingsDraft,
   isValidAffinityCapacity,
   isValidCredentialConcurrencyLimit,
+  isValidCredentialQueueTimeout,
   isValidNonNegativeInteger,
   isValidRetention,
   isValidTimeout,
@@ -212,6 +213,8 @@ const invalidKeys = computed<RuntimeSettingKey[]>(() => {
       return !isValidAffinityCapacity(current.values.affinity_capacity)
     if (key === 'credential_concurrency_limit')
       return !isValidCredentialConcurrencyLimit(current.values.credential_concurrency_limit)
+    if (key === 'credential_queue_timeout')
+      return !isValidCredentialQueueTimeout(current.values.credential_queue_timeout)
     if (
       key === 'retry_count' ||
       key === 'blacklist_threshold' ||
@@ -340,7 +343,9 @@ function settingLabel(key: RuntimeSettingKey): string {
     key === 'affinity_enabled' ||
     key === 'affinity_ttl' ||
     key === 'affinity_capacity' ||
-    key === 'credential_concurrency_limit'
+    key === 'credential_concurrency_limit' ||
+    key === 'credential_queue_enabled' ||
+    key === 'credential_queue_timeout'
   )
     return t(`settings.affinity.${key}`)
   if (key === 'request_log_retention_days') return t('settings.logs.retention')
@@ -368,7 +373,9 @@ function sectionForKey(key: RuntimeSettingKey): SettingsSection {
     key === 'affinity_enabled' ||
     key === 'affinity_ttl' ||
     key === 'affinity_capacity' ||
-    key === 'credential_concurrency_limit'
+    key === 'credential_concurrency_limit' ||
+    key === 'credential_queue_enabled' ||
+    key === 'credential_queue_timeout'
   )
     return 'routing'
   if (

@@ -29,12 +29,14 @@ export const settingNumbers = {
   affinity_ttl: { min: 1, max: 9_223_372_036, unit: 'seconds' },
   affinity_capacity: { min: 1, max: 1_000_000, unit: 'entries' },
   credential_concurrency_limit: { min: 0, max: 64, unit: 'requests' },
+  credential_queue_timeout: { min: 1, max: 600, unit: 'seconds' },
   validation_interval: { min: 1, max: 9_223_372_036, unit: 'seconds' },
   request_log_retention_days: { min: 1, max: 365, unit: 'days' },
 } as const
 export type SettingNumber = keyof typeof settingNumbers
 export const settingSwitches = [
   'affinity_enabled',
+  'credential_queue_enabled',
   'responses_websocket_enabled',
   'empty_response_retry',
   'models_dev_auto_sync_enabled',

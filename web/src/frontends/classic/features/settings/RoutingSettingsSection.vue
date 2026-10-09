@@ -15,6 +15,7 @@ import {
   createSettingsDraft,
   isValidAffinityCapacity,
   isValidCredentialConcurrencyLimit,
+  isValidCredentialQueueTimeout,
   isValidTimeout,
   setSettingsOverride,
   type SettingsDraft,
@@ -30,21 +31,24 @@ const emit = defineEmits<{
   change: [change: SettingsDraftChange]
 }>()
 const { locale, t } = useI18n()
-const numericKeys = ['affinity_ttl', 'affinity_capacity', 'credential_concurrency_limit'] as const
+const numericKeys = ['affinity_ttl', 'affinity_capacity', 'credential_concurrency_limit', 'credential_queue_timeout'] as const
 const numericUnits: Record<(typeof numericKeys)[number], string> = {
   affinity_ttl: 'settings.runtime.seconds',
   affinity_capacity: 'settings.affinity.entries',
   credential_concurrency_limit: 'settings.affinity.requests',
+  credential_queue_timeout: 'settings.runtime.seconds',
 }
 const numericMaximums: Record<(typeof numericKeys)[number], string> = {
   affinity_ttl: '9223372036',
   affinity_capacity: '1000000',
   credential_concurrency_limit: '64',
+  credential_queue_timeout: '600',
 }
 const numericMinimums: Record<(typeof numericKeys)[number], string> = {
   affinity_ttl: '1',
   affinity_capacity: '1',
   credential_concurrency_limit: '0',
+  credential_queue_timeout: '1',
 }
 const routeStrategyOptions = computed<SegmentedControlOption[]>(() =>
   routeStrategies.map((value) => ({
@@ -107,6 +111,18 @@ function setEnabled(value: boolean): void {
   publish('affinity_enabled', draft)
 }
 
+const queueEnabledValue = computed(() =>
+  props.base.settings.values.credential_queue_enabled
+    ? t('settings.runtime.enabled')
+    : t('settings.runtime.disabled'),
+)
+
+function setQueueEnabled(value: boolean): void {
+  const draft = cloneDraft()
+  draft.values.credential_queue_enabled = value
+  publish('credential_queue_enabled', draft)
+}
+
 function setNumber(key: (typeof numericKeys)[number], value: string): void {
   const draft = cloneDraft()
   draft.values[key] = value.trim() === '' ? Number.NaN : Number(value)
@@ -120,7 +136,9 @@ function numberFieldError(key: (typeof numericKeys)[number]): string | undefined
       ? isValidTimeout(props.draft.values[key])
       : key === 'affinity_capacity'
         ? isValidAffinityCapacity(props.draft.values[key])
-        : isValidCredentialConcurrencyLimit(props.draft.values[key])
+        : key === 'credential_concurrency_limit'
+          ? isValidCredentialConcurrencyLimit(props.draft.values[key])
+          : isValidCredentialQueueTimeout(props.draft.values[key])
   return valid ? undefined : t(`settings.affinity.${key}Error`)
 }
 
@@ -185,6 +203,31 @@ function numberFieldValue(key: (typeof numericKeys)[number]): string {
             :disabled="disabled"
             :label="t('settings.affinity.affinity_enabled')"
             @update:model-value="setEnabled"
+          />
+        </template>
+      </SettingRow>
+
+      <SettingRow
+        :label="t('settings.affinity.credential_queue_enabled')"
+        :value="
+          isPendingRestore('credential_queue_enabled')
+            ? t('settings.runtime.resetPending')
+            : queueEnabledValue
+        "
+        :help="t('settings.affinity.credential_queue_enabledHelp')"
+        :source-label="sourceLabel('credential_queue_enabled')"
+        :action-label="actionLabel('credential_queue_enabled')"
+        :overridden="hasOverride('credential_queue_enabled')"
+        :pending-restore="isPendingRestore('credential_queue_enabled')"
+        :disabled="disabled"
+        @toggle="toggleOverride('credential_queue_enabled')"
+      >
+        <template #control>
+          <AppSwitch
+            :model-value="draft.values.credential_queue_enabled"
+            :disabled="disabled"
+            :label="t('settings.affinity.credential_queue_enabled')"
+            @update:model-value="setQueueEnabled"
           />
         </template>
       </SettingRow>

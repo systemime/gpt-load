@@ -3,6 +3,7 @@ package state
 import (
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestCredentialSlotsAdmitUpToCapacity(t *testing.T) {
@@ -90,5 +91,64 @@ func TestCredentialSlotsConcurrentAcquireRespectsCapacity(t *testing.T) {
 	acquired.Wait()
 	if granted != 8 {
 		t.Fatalf("granted = %d, want 8", granted)
+	}
+}
+
+func TestCredentialSlotsAcquireWithinWaitWakesOnRelease(t *testing.T) {
+	slots := NewCredentialSlots(1)
+	if !slots.TryAcquireWithin(3, 3) || !slots.TryAcquireWithin(3, 3) || !slots.TryAcquireWithin(3, 3) {
+		t.Fatal("fill budget failed")
+	}
+	if slots.TryAcquireWithin(3, 3) {
+		t.Fatal("acquire beyond limit should fail")
+	}
+	if slots.Waiting(3) != 0 {
+		t.Fatalf("Waiting = %d before wait, want 0", slots.Waiting(3))
+	}
+	acquired := make(chan bool, 1)
+	go func() {
+		acquired <- slots.AcquireWithinWait(3, 3, 5*time.Second, nil)
+	}()
+	// 等待者登记后再释放, 确保走唤醒路径而非快路径。
+	deadline := time.Now().Add(time.Second)
+	for slots.Waiting(3) == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if slots.Waiting(3) != 1 {
+		t.Fatal("waiter not registered")
+	}
+	slots.Release(3)
+	if !<-acquired {
+		t.Fatal("AcquireWithinWait did not wake on release")
+	}
+	if slots.Inflight(3) != 3 {
+		t.Fatalf("Inflight = %d, want 3", slots.Inflight(3))
+	}
+}
+
+func TestCredentialSlotsAcquireWithinWaitTimesOut(t *testing.T) {
+	slots := NewCredentialSlots(4)
+	if !slots.TryAcquireWithin(5, 2) || !slots.TryAcquireWithin(5, 2) {
+		t.Fatal("fill budget failed")
+	}
+	started := time.Now()
+	if slots.AcquireWithinWait(5, 2, 30*time.Millisecond, nil) {
+		t.Fatal("wait should time out while budget is held")
+	}
+	if time.Since(started) < 20*time.Millisecond {
+		t.Fatal("returned before timeout")
+	}
+	if slots.Waiting(5) != 0 {
+		t.Fatalf("Waiting after timeout = %d, want 0", slots.Waiting(5))
+	}
+}
+
+func TestCredentialSlotsAcquireWithinWaitHonorsDone(t *testing.T) {
+	slots := NewCredentialSlots(1)
+	slots.TryAcquire(7)
+	done := make(chan struct{})
+	close(done)
+	if slots.AcquireWithinWait(7, 1, 5*time.Second, done) {
+		t.Fatal("wait should abort when done closes")
 	}
 }

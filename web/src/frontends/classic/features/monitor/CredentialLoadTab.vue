@@ -303,6 +303,11 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
   color: var(--color-text-muted);
 }
 
+.credential-load__queued {
+  color: var(--color-status-warning, var(--color-text-muted));
+  margin-left: 4px;
+}
+
 .credential-load__danger {
   color: var(--color-status-danger, inherit);
 }

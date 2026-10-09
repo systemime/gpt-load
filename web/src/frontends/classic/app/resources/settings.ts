@@ -61,6 +61,8 @@ export const runtimeSettingKeys = [
   'affinity_ttl',
   'affinity_capacity',
   'credential_concurrency_limit',
+  'credential_queue_enabled',
+  'credential_queue_timeout',
   'validation_interval',
   'request_log_retention_days',
   'models_dev_auto_sync_enabled',
@@ -88,6 +90,8 @@ export type TimeoutSettingKey = Exclude<
   | 'empty_response_retry'
   | 'affinity_capacity'
   | 'credential_concurrency_limit'
+  | 'credential_queue_enabled'
+  | 'credential_queue_timeout'
   | 'request_log_retention_days'
   | 'models_dev_auto_sync_enabled'
   | 'auto_model'
@@ -135,6 +139,8 @@ export interface SettingsValues {
   affinity_ttl: number
   affinity_capacity: number
   credential_concurrency_limit: number
+  credential_queue_enabled: boolean
+  credential_queue_timeout: number
   validation_interval: number
   request_log_retention_days: number
   models_dev_auto_sync_enabled: boolean
@@ -176,6 +182,8 @@ export type SettingsPatch = Partial<{
   affinity_ttl: number | null
   affinity_capacity: number | null
   credential_concurrency_limit: number | null
+  credential_queue_enabled: boolean | null
+  credential_queue_timeout: number | null
   validation_interval: number | null
   request_log_retention_days: number | null
   models_dev_auto_sync_enabled: boolean | null
@@ -313,6 +321,11 @@ export function projectSettings(value: unknown): SettingsDto {
       credential_concurrency_limit: projectSafeInteger(values.credential_concurrency_limit, {
         minimum: 0,
         maximum: 64,
+      }),
+      credential_queue_enabled: projectBoolean(values.credential_queue_enabled),
+      credential_queue_timeout: projectSafeInteger(values.credential_queue_timeout, {
+        minimum: 1,
+        maximum: 600,
       }),
       validation_interval: projectSafeInteger(values.validation_interval, { minimum: 1 }),
       request_log_retention_days: projectSafeInteger(values.request_log_retention_days, {

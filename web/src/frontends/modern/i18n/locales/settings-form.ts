@@ -64,6 +64,8 @@ export const zhCN = {
     affinity_ttl: '亲和有效期',
     affinity_capacity: '亲和缓存容量',
     credential_concurrency_limit: '每凭证并发上限',
+    credential_queue_enabled: '超出组预算排队',
+    credential_queue_timeout: '排队等待上限',
     empty_response_retry: '空回检测',
     responses_websocket_enabled: 'Responses WebSocket',
     proxy_config: '上游代理',
@@ -95,6 +97,9 @@ export const zhCN = {
     affinity_enabled: '复用上次命中的路由目标；分组可单独覆盖。',
     affinity_ttl: '亲和记录的默认保留时长。',
     affinity_capacity: '最多保留的亲和记录数，范围为 1–1,000,000。',
+    credential_queue_enabled:
+      '全池达 cap 后，超出组预算（凭证数×(cap+2)）的请求在本凭证排队等待槽位而不是立刻失败；关闭则直接放行。',
+    credential_queue_timeout: '排队请求的最长等待时长，超时返回 429 并附带 Retry-After。',
     credential_concurrency_limit:
       '单个凭证同时在途的请求数上限，超出部分溢出到其他凭证以规避厂商限流；0 表示不限制。默认 6 依据团队标准版实测（2026-10-09，4 key 阶梯加压多轮）：K≤6 全部通过零 429，K=8 约 1/3 轮次被限 1 条，K=10 几乎每轮被限 1–3 条，K=16 无一全过；硬顶约 8 并发，429 为 1302 速率限制，与模型无关。建议 8−2 余量；套餐升档可上调，出 1302 再回调。',
     responses_websocket_enabled: '关闭会断开受影响的 WebSocket 连接并中断生成，HTTP/SSE 不受影响。',
@@ -249,6 +254,8 @@ export const enUS = {
     affinity_ttl: 'Affinity lifetime',
     affinity_capacity: 'Affinity cache capacity',
     credential_concurrency_limit: 'Per-credential concurrency cap',
+    credential_queue_enabled: 'Queue beyond group budget',
+    credential_queue_timeout: 'Queue wait limit',
     empty_response_retry: 'Empty response detection',
     responses_websocket_enabled: 'Responses WebSocket',
     proxy_config: 'Upstream proxy',
@@ -283,6 +290,9 @@ export const enUS = {
     auto_model: 'Jev selects a preset; existing scheduling chooses the Group and credential.',
     affinity_ttl: 'Default lifetime of affinity records.',
     affinity_capacity: 'Maximum affinity records, from 1 to 1,000,000.',
+    credential_queue_enabled:
+      'When every credential reaches its cap, requests beyond the group budget (credentials × (cap + 2)) queue for a slot instead of failing; disable to serve immediately.',
+    credential_queue_timeout: 'Maximum wait for a queued request; exceeding it returns 429 with Retry-After.',
     credential_concurrency_limit:
       'Maximum in-flight requests per credential; excess overflows to other credentials to avoid provider rate limits. 0 means unlimited. Default 6 comes from measured Team Standard behavior (2026-10-09, 4 keys, ramped bursts): K<=6 always passed with zero 429s, K=8 lost 1 request in about 1 of 3 rounds, K=10 lost 1-3 almost every round, K=16 never fully passed. Hard ceiling is about 8 concurrent per key (429 code 1302), independent of model. Recommended 8-2 headroom; raise after plan upgrades, lower again if 1302 appears.',
     responses_websocket_enabled:
@@ -443,6 +453,8 @@ export const jaJP = {
     affinity_ttl: '親和性の有効期間',
     affinity_capacity: '親和性キャッシュ容量',
     credential_concurrency_limit: '認証情報ごとの同時実行上限',
+    credential_queue_enabled: 'グループ予算超過時のキューイング',
+    credential_queue_timeout: 'キュー待機上限',
     empty_response_retry: '空応答の検出',
     responses_websocket_enabled: 'Responses WebSocket',
     proxy_config: '上流プロキシ',
@@ -477,6 +489,9 @@ export const jaJP = {
     auto_model: 'Jev がプリセットを選び、既存の経路がグループと認証情報を選択します。',
     affinity_ttl: '親和性レコードの既定保持時間。',
     affinity_capacity: '親和性レコードの上限。1～1,000,000 件。',
+    credential_queue_enabled:
+      '全認証情報が cap に達した後、グループ予算（認証情報数×(cap+2)）を超えるリクエストは即時失敗せずスロット待ちします。無効化すると即時実行します。',
+    credential_queue_timeout: 'キュー待ちの最長時間。超過すると Retry-After 付きの 429 を返します。',
     credential_concurrency_limit:
       '単一認証情報の同時実行リクエスト上限。超過分は他の認証情報へ溢れてプロバイダの制限を回避します。0 は無制限。デフォルト 6 はチーム標準プランの実測（2026-10-09、4 キー段階加圧）に基づきます。K≤6 は全通過・429 ゼロ、K=8 は約 3 分の 1 のラウンドで 1 件失敗、K=10 はほぼ毎回 1～3 件失敗、K=16 は全通過なし。上限は約 8 同時（429 コード 1302）、モデルとは無関係。推奨は 8−2 の余裕。プラン変更後は引き上げ、1302 が出たら戻してください。',
     responses_websocket_enabled:

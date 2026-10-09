@@ -1288,7 +1288,7 @@ func (handler *Handler) executeAttempts(
 			}
 		}
 		// 每凭证在途准入: 响应续接(单凭证硬绑定)不设限, 其余请求满 cap 时换候选;
-		// 全池达 cap 的豁免候选(调度器标记)强制放行, cap 永不制造不可用。
+		// 全池达 cap 的豁免候选走组预算排队(阶段 2), 超深/超时 429。
 		releaseAttempt := releaseGroup
 		if originalMetadata.PreviousResponseID == "" &&
 			!handler.credentialSlots.TryAcquire(selection.CredentialID) {
@@ -1296,7 +1296,9 @@ func (handler *Handler) executeAttempts(
 				releaseGroup()
 				continue
 			}
-			handler.credentialSlots.ForceAcquire(selection.CredentialID)
+			if !handler.admitBeyondCap(ginContext, recorder, snapshot, allowedCredentialRefs, selection) {
+				return
+			}
 		}
 		if originalMetadata.PreviousResponseID == "" {
 			acquiredCredential := selection.CredentialID

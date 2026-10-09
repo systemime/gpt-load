@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"github.com/gin-gonic/gin"
+
 	"gpt-load/internal/affinity"
 	"gpt-load/internal/protocol"
 	"gpt-load/internal/scheduler"
@@ -23,6 +25,62 @@ func (handler *Handler) configureCredentialSlots(snapshot *state.ConfigSnapshot)
 		return
 	}
 	handler.credentialSlots.Configure(snapshot.Settings.CredentialConcurrencyLimit)
+}
+
+// admitBeyondCap 处理全池达 cap 的豁免候选(阶段 2 排队准入):
+//   - 单凭证预算 = cap + CredentialQueueSlack;
+//   - 组预算内先到先得直接放行;
+//   - 超出组预算的请求在本凭证上排队等待(等的就是原凭证槽位, 亲和缓存无损);
+//   - 排队深度超过组预算两倍, 或等待超时, 返回 429 + Retry-After。
+//
+// 返回 false 表示请求已写回拒绝响应, 调用方直接结束。
+func (handler *Handler) admitBeyondCap(
+	ginContext *gin.Context,
+	recorder *requestRecorder,
+	snapshot *state.ConfigSnapshot,
+	allowedCredentialRefs map[uint]state.CredentialRef,
+	selection scheduler.Selection,
+) bool {
+	slots := handler.credentialSlots
+	capacity := slots.Capacity()
+	if capacity <= 0 {
+		slots.ForceAcquire(selection.CredentialID)
+		return true
+	}
+	budgetPerCredential := int64(capacity) + state.CredentialQueueSlack
+	queueEnabled := snapshot.Settings.CredentialQueueEnabled
+	queued := int64(0)
+	members := 0
+	for id := range allowedCredentialRefs {
+		if id == 0 {
+			continue
+		}
+		members++
+		queued += slots.Waiting(id)
+	}
+	groupBudget := int64(members) * budgetPerCredential
+	if !queueEnabled || queued >= groupBudget*2 {
+		// 防雪崩: 深度超限即拒绝, 不再堆等待者。
+		handler.rejectQueued(ginContext, recorder, snapshot)
+		return false
+	}
+	timeout := snapshot.Settings.CredentialQueueTimeout
+	if !slots.AcquireWithinWait(
+		selection.CredentialID, budgetPerCredential, timeout, ginContext.Request.Context().Done(),
+	) {
+		handler.rejectQueued(ginContext, recorder, snapshot)
+		return false
+	}
+	return true
+}
+
+func (handler *Handler) rejectQueued(
+	ginContext *gin.Context,
+	recorder *requestRecorder,
+	snapshot *state.ConfigSnapshot,
+) {
+	setCooldownRetryAfter(ginContext, handler.now().Add(snapshot.Settings.CredentialQueueTimeout), handler.now())
+	handler.completeReason(ginContext, recorder, reasonUpstreamRateLimited)
 }
 
 func (handler *Handler) resolveRequestAffinity(

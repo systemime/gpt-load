@@ -24,6 +24,7 @@ export default {
       table: 'Credential load distribution',
       windows: { '1h': 'Last hour', '5h': 'Last 5 hours', '24h': 'Last 24 hours' },
       summary: '{count} credentials · per-credential cap {cap} · local rejects {rejects}',
+      queued: '{count} queued',
       unlimited: 'unlimited',
       loading: 'Loading credential load…',
       loadError: 'Failed to load credential load.',

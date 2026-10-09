@@ -73,7 +73,7 @@ func TestCredentialLoadEndpointAggregatesWindowsErrorsAndInflight(t *testing.T) 
 		t.Fatal("occupy credential 1 failed")
 	}
 	if _, err := fixture.manager.Publish(state.CompileInput{
-		SystemSettings: config.Settings{state.SettingCredentialConcurrencyLimit: 2},
+		SystemSettings:  config.Settings{state.SettingCredentialConcurrencyLimit: 2},
 		ChannelRegistry: fixture.channelRegistry,
 	}); err != nil {
 		t.Fatalf("Publish() error = %v", err)

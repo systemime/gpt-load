@@ -28,6 +28,7 @@ export interface CredentialLoadItem {
   name: string
   status: string
   inflight: number
+  queued: number
   windows: Record<CredentialLoadWindowKey, CredentialLoadWindow>
   errors5h: CredentialLoadErrors
 }
@@ -72,6 +73,7 @@ function readItem(value: unknown): CredentialLoadItem {
     name: text(row.name),
     status: text(row.status),
     inflight: integer(row.inflight),
+    queued: integer(row.queued),
     windows: Object.fromEntries(
       credentialLoadWindowKeys.map((key) => [key, readWindow(windows[key])]),
     ) as Record<CredentialLoadWindowKey, CredentialLoadWindow>,

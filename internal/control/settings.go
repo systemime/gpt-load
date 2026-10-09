@@ -68,6 +68,8 @@ type SettingsValuesResponse struct {
 	AffinityTTL                      int64                 `json:"affinity_ttl"`
 	AffinityCapacity                 int                   `json:"affinity_capacity"`
 	CredentialConcurrencyLimit       int                   `json:"credential_concurrency_limit"`
+	CredentialQueueEnabled           bool                  `json:"credential_queue_enabled"`
+	CredentialQueueTimeout           int64                 `json:"credential_queue_timeout"`
 	ValidationInterval               int64                 `json:"validation_interval"`
 	RequestLogRetentionDays          int                   `json:"request_log_retention_days"`
 	ModelsDevAutoSyncEnabled         bool                  `json:"models_dev_auto_sync_enabled"`
@@ -483,6 +485,8 @@ func mapSettingsResponse(
 			AffinityTTL:                      durationSeconds(settings.AffinityTTL),
 			AffinityCapacity:                 settings.AffinityCapacity,
 			CredentialConcurrencyLimit:       settings.CredentialConcurrencyLimit,
+			CredentialQueueEnabled:           settings.CredentialQueueEnabled,
+			CredentialQueueTimeout:           durationSeconds(settings.CredentialQueueTimeout),
 			ValidationInterval:               durationSeconds(settings.ValidationInterval),
 			RequestLogRetentionDays:          settings.RequestLogRetentionDays,
 			ModelsDevAutoSyncEnabled:         modelsDevAutoSyncEnabled,

@@ -24,6 +24,7 @@ export default {
       table: '凭证负载分布',
       windows: { '1h': '近 1 小时', '5h': '近 5 小时', '24h': '近 24 小时' },
       summary: '{count} 个凭证 · 每凭证并发上限 {cap} · 本地拒绝 {rejects}',
+      queued: '排队 {count}',
       unlimited: '不限',
       loading: '正在加载凭证负载…',
       loadError: '无法加载凭证负载。',

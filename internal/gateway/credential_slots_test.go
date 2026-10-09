@@ -1,7 +1,11 @@
 package gateway
 
 import (
+	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 // cap=1 且凭证 1 已占满时, 新请求必须溢出到另一凭证;
@@ -46,5 +50,59 @@ func TestHandlerServesWhenAllCredentialsCapped(t *testing.T) {
 
 	if len(forwarder.inputs) == 0 {
 		t.Fatal("request was not served while all credentials were at cap")
+	}
+}
+
+// 组预算(cap+slack)内排队立即拿到豁免槽位并正常服务。
+func TestHandlerQueuesBeyondCapWithinGroupBudget(t *testing.T) {
+	forwarder := &scriptedForwarder{results: successfulAffinityResults(1)}
+	handler, manager, _ := newHandlerForTest(t, forwarder, "sk-one", "sk-two")
+
+	snapshot := manager.Current()
+	snapshot.Settings.CredentialConcurrencyLimit = 1
+	handler.credentialSlots.Configure(1)
+	handler.credentialSlots.TryAcquire(1)
+	handler.credentialSlots.TryAcquire(2)
+
+	engine := newAffinityTestEngine(t, handler)
+	serveAffinityRequest(t, engine, `{"model":"gpt-4o","messages":[{"role":"user","content":"queued burst"}]}`)
+
+	if len(forwarder.inputs) == 0 {
+		t.Fatal("queued request should be admitted within group budget")
+	}
+}
+
+// 组预算耗尽(cap+slack 全满)时排队等待, 超时返回 429 + Retry-After。
+func TestHandlerQueueTimeoutReturns429(t *testing.T) {
+	forwarder := &scriptedForwarder{results: successfulAffinityResults(1)}
+	handler, manager, _ := newHandlerForTest(t, forwarder, "sk-one", "sk-two")
+
+	snapshot := manager.Current()
+	snapshot.Settings.CredentialConcurrencyLimit = 1
+	snapshot.Settings.CredentialQueueTimeout = 50 * time.Millisecond
+	handler.credentialSlots.Configure(1)
+	// 预算 = cap(1) + slack(2) = 3: 把两个凭证都填满到预算。
+	for i := 0; i < 3; i++ {
+		handler.credentialSlots.TryAcquireWithin(1, 3)
+		handler.credentialSlots.TryAcquireWithin(2, 3)
+	}
+
+	engine := newAffinityTestEngine(t, handler)
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/chat/completions",
+		bytes.NewBufferString(`{"model":"gpt-4o","messages":[{"role":"user","content":"over budget"}]}`),
+	)
+	request.Header.Set("Authorization", "Bearer gl-client")
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, request)
+	if response.Code != http.StatusTooManyRequests {
+		t.Fatalf("response = %d %s, want 429", response.Code, response.Body.String())
+	}
+	if response.Header().Get("Retry-After") == "" {
+		t.Fatal("429 queue timeout should carry Retry-After")
+	}
+	if len(forwarder.inputs) != 0 {
+		t.Fatal("request beyond group budget must not reach upstream")
 	}
 }

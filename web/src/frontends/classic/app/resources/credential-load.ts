@@ -33,6 +33,7 @@ export interface CredentialLoadItem {
   name: string
   status: string
   inflight: number
+  queued: number
   windows: Record<CredentialLoadWindowKey, CredentialLoadWindow>
   errors_5h: CredentialLoadErrors
 }
@@ -61,7 +62,7 @@ const errorFields = [
   'scheduled',
   'other',
 ] as const
-const itemFields = ['id', 'name', 'status', 'inflight', 'windows', 'errors_5h'] as const
+const itemFields = ['id', 'name', 'status', 'inflight', 'queued', 'windows', 'errors_5h'] as const
 const reportFields = ['observed_at_ms', 'cap', 'credentials', 'local_rejects'] as const
 
 function invalidResponse(): never {
@@ -113,6 +114,7 @@ function projectItem(value: unknown): CredentialLoadItem {
     name: projectString(record.name, { allowEmpty: true }),
     status: projectString(record.status),
     inflight: projectCount(record.inflight),
+    queued: projectCount(record.queued),
     windows: mapped,
     errors_5h: projectErrors(record.errors_5h),
   }

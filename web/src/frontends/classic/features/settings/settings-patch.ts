@@ -122,6 +122,8 @@ export function setSettingsOverride(
       next.values.responses_websocket_enabled = base.values.responses_websocket_enabled
     } else if (key === 'empty_response_retry') {
       next.values.empty_response_retry = base.values.empty_response_retry
+    } else if (key === 'credential_queue_enabled') {
+      next.values.credential_queue_enabled = base.values.credential_queue_enabled
     } else if (key === 'models_dev_auto_sync_enabled') {
       next.values.models_dev_auto_sync_enabled = base.values.models_dev_auto_sync_enabled
     } else if (key === 'cors') {
@@ -309,6 +311,10 @@ export function isValidCredentialConcurrencyLimit(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0 && value <= 64
 }
 
+export function isValidCredentialQueueTimeout(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 1 && value <= 600
+}
+
 export function isValidNonNegativeInteger(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0
 }
@@ -397,7 +403,9 @@ export function validateSettingsSection(draft: SettingsDraft, section: SettingsS
       (!draft.overrides.has('affinity_capacity') ||
         isValidAffinityCapacity(draft.values.affinity_capacity)) &&
       (!draft.overrides.has('credential_concurrency_limit') ||
-        isValidCredentialConcurrencyLimit(draft.values.credential_concurrency_limit))
+        isValidCredentialConcurrencyLimit(draft.values.credential_concurrency_limit)) &&
+      (!draft.overrides.has('credential_queue_timeout') ||
+        isValidCredentialQueueTimeout(draft.values.credential_queue_timeout))
     )
   }
   if (section === 'logs-maintenance') {

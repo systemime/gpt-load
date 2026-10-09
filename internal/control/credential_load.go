@@ -33,6 +33,7 @@ type credentialLoadItem struct {
 	Name     string                               `json:"name"`
 	Status   string                               `json:"status"`
 	Inflight int64                                `json:"inflight"`
+	Queued   int64                                `json:"queued"`
 	Windows  map[string]credentialLoadWindowStats `json:"windows"`
 	Errors5h credentialLoadErrorStats             `json:"errors_5h"`
 }
@@ -115,6 +116,7 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 		item := credentialLoadItem{
 			ID: view.ID, Name: names[view.ID], Status: string(view.Status),
 			Inflight: slots.Inflight(view.ID),
+			Queued:   slots.Waiting(view.ID),
 			Windows:  windows[view.ID],
 			Errors5h: errorCounts[view.ID],
 		}

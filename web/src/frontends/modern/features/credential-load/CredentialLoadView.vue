@@ -155,6 +155,11 @@ function formatTokens(value: number): string {
           </span>
           <span role="cell" class="modern-credential-load__num">
             {{ item.inflight }}<template v-if="report.cap > 0"> / {{ report.cap }}</template>
+            <template v-if="item.queued > 0">
+              <span class="modern-credential-load__queued">
+                {{ t('credentialLoad.queued', { count: item.queued }) }}
+              </span>
+            </template>
           </span>
           <span role="cell" class="modern-credential-load__num">{{ stats.requests }}</span>
           <span role="cell" class="modern-credential-load__share">
@@ -275,6 +280,11 @@ function formatTokens(value: number): string {
 
 .modern-credential-load__muted {
   color: var(--modern-color-text-muted, inherit);
+}
+
+.modern-credential-load__queued {
+  color: var(--modern-color-warning, inherit);
+  margin-left: 4px;
 }
 
 .modern-credential-load__danger {

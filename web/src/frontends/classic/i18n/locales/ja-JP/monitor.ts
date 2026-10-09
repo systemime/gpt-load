@@ -24,6 +24,7 @@ export default {
       table: '認証情報の負荷分布',
       windows: { '1h': '直近 1 時間', '5h': '直近 5 時間', '24h': '直近 24 時間' },
       summary: '{count} 件の認証情報 · 同時実行上限 {cap} · ローカル拒否 {rejects}',
+      queued: '{count} 件待機',
       unlimited: '無制限',
       loading: '認証情報の負荷を読み込み中…',
       loadError: '認証情報の負荷を読み込めませんでした。',
