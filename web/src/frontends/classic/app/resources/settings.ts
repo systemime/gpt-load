@@ -60,6 +60,7 @@ export const runtimeSettingKeys = [
   'empty_response_retry',
   'affinity_ttl',
   'affinity_capacity',
+  'credential_concurrency_limit',
   'validation_interval',
   'request_log_retention_days',
   'models_dev_auto_sync_enabled',
@@ -86,6 +87,7 @@ export type TimeoutSettingKey = Exclude<
   | 'responses_websocket_enabled'
   | 'empty_response_retry'
   | 'affinity_capacity'
+  | 'credential_concurrency_limit'
   | 'request_log_retention_days'
   | 'models_dev_auto_sync_enabled'
   | 'auto_model'
@@ -132,6 +134,7 @@ export interface SettingsValues {
   empty_response_retry: boolean
   affinity_ttl: number
   affinity_capacity: number
+  credential_concurrency_limit: number
   validation_interval: number
   request_log_retention_days: number
   models_dev_auto_sync_enabled: boolean
@@ -172,6 +175,7 @@ export type SettingsPatch = Partial<{
   empty_response_retry: boolean | null
   affinity_ttl: number | null
   affinity_capacity: number | null
+  credential_concurrency_limit: number | null
   validation_interval: number | null
   request_log_retention_days: number | null
   models_dev_auto_sync_enabled: boolean | null
@@ -305,6 +309,10 @@ export function projectSettings(value: unknown): SettingsDto {
       affinity_capacity: projectSafeInteger(values.affinity_capacity, {
         minimum: 1,
         maximum: 1_000_000,
+      }),
+      credential_concurrency_limit: projectSafeInteger(values.credential_concurrency_limit, {
+        minimum: 0,
+        maximum: 64,
       }),
       validation_interval: projectSafeInteger(values.validation_interval, { minimum: 1 }),
       request_log_retention_days: projectSafeInteger(values.request_log_retention_days, {

@@ -130,12 +130,20 @@ export default {
       enabledHelp:
         'When disabled, only Groups that explicitly enable affinity can learn and reuse an affinity target.',
       affinity_ttl: 'Default lifetime',
+      affinity_ttlHelp: 'How long an affinity mapping stays alive. Each hit refreshes the remaining lifetime; changes clear learned mappings.',
       affinity_ttlEffective: '{value} seconds',
       affinity_ttlError: 'Enter a positive safe integer no greater than 9,223,372,036.',
       affinity_capacity: 'Cache capacity',
+      affinity_capacityHelp: 'LRU upper bound of the in-process affinity mapping; the least recently used entries are evicted beyond it.',
       affinity_capacityEffective: '{value} entries',
       affinity_capacityError: 'Enter a whole number between 1 and 1,000,000.',
+      credential_concurrency_limit: 'Per-credential concurrency cap',
+      credential_concurrency_limitHelp:
+        'Maximum in-flight requests per credential; excess overflows to other credentials to avoid provider rate limits. 0 disables the cap. Default 6 is based on measured behavior (Team Standard plan, 4 keys, 2026-10-09): ramped parallel bursts K=2/4/6/8/10/12/16 over multiple rounds — K≤6 always passed with zero 429s; K=8 lost 1 request in about 1 of 3 rounds; K=10 lost 1-3 almost every round; K=16 never fully passed. The hard ceiling is about 8 concurrent requests per key; the 429 body is code 1302 "account rate limit reached", which looks like a hybrid concurrency plus arrival-rate limit. glm-5.3 and glm-5.3-flash showed the same ceiling, so the limit is per key, not per model. Recommended value = 8 − 2 headroom; raise to 7-8 after a plan upgrade, lower again if 1302 appears.',
+      credential_concurrency_limitEffective: '{value} concurrent',
+      credential_concurrency_limitError: 'Enter a whole number between 0 and 64 (0 means unlimited).',
       entries: 'entries',
+      requests: 'concurrent',
     },
     headers: {
       description: 'Headers set, overridden, or removed before the request reaches upstream.',

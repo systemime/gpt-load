@@ -14,6 +14,7 @@ import SettingRow from '@/components/config/SettingRow.vue'
 import {
   createSettingsDraft,
   isValidAffinityCapacity,
+  isValidCredentialConcurrencyLimit,
   isValidTimeout,
   setSettingsOverride,
   type SettingsDraft,
@@ -29,7 +30,22 @@ const emit = defineEmits<{
   change: [change: SettingsDraftChange]
 }>()
 const { locale, t } = useI18n()
-const numericKeys = ['affinity_ttl', 'affinity_capacity'] as const
+const numericKeys = ['affinity_ttl', 'affinity_capacity', 'credential_concurrency_limit'] as const
+const numericUnits: Record<(typeof numericKeys)[number], string> = {
+  affinity_ttl: 'settings.runtime.seconds',
+  affinity_capacity: 'settings.affinity.entries',
+  credential_concurrency_limit: 'settings.affinity.requests',
+}
+const numericMaximums: Record<(typeof numericKeys)[number], string> = {
+  affinity_ttl: '9223372036',
+  affinity_capacity: '1000000',
+  credential_concurrency_limit: '64',
+}
+const numericMinimums: Record<(typeof numericKeys)[number], string> = {
+  affinity_ttl: '1',
+  affinity_capacity: '1',
+  credential_concurrency_limit: '0',
+}
 const routeStrategyOptions = computed<SegmentedControlOption[]>(() =>
   routeStrategies.map((value) => ({
     value,
@@ -102,7 +118,9 @@ function numberFieldError(key: (typeof numericKeys)[number]): string | undefined
   const valid =
     key === 'affinity_ttl'
       ? isValidTimeout(props.draft.values[key])
-      : isValidAffinityCapacity(props.draft.values[key])
+      : key === 'affinity_capacity'
+        ? isValidAffinityCapacity(props.draft.values[key])
+        : isValidCredentialConcurrencyLimit(props.draft.values[key])
   return valid ? undefined : t(`settings.affinity.${key}Error`)
 }
 
@@ -176,6 +194,7 @@ function numberFieldValue(key: (typeof numericKeys)[number]): string {
         :key="key"
         :label="t(`settings.affinity.${key}`)"
         :value="numberFieldValue(key)"
+        :help="t(`settings.affinity.${key}Help`)"
         :source-label="sourceLabel(key)"
         :action-label="actionLabel(key)"
         :overridden="hasOverride(key)"
@@ -196,8 +215,8 @@ function numberFieldValue(key: (typeof numericKeys)[number]): string {
                   appearance="surface"
                   size="compact"
                   monospace
-                  min="1"
-                  :max="key === 'affinity_ttl' ? '9223372036' : '1000000'"
+                  :min="numericMinimums[key]"
+                  :max="numericMaximums[key]"
                   step="1"
                   inputmode="numeric"
                   :disabled="disabled"
@@ -208,11 +227,7 @@ function numberFieldValue(key: (typeof numericKeys)[number]): string {
               </template>
             </CompactFieldError>
             <span aria-hidden="true">
-              {{
-                key === 'affinity_ttl'
-                  ? t('settings.runtime.seconds')
-                  : t('settings.affinity.entries')
-              }}
+              {{ t(numericUnits[key]) }}
             </span>
           </div>
         </template>

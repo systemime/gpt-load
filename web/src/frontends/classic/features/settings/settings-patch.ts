@@ -47,7 +47,12 @@ const requestForwardingKeys: RuntimeSettingKey[] = [
   'validation_interval',
 ]
 const logsMaintenanceKeys: RuntimeSettingKey[] = ['request_log_retention_days']
-const affinityKeys: RuntimeSettingKey[] = ['affinity_enabled', 'affinity_ttl', 'affinity_capacity']
+const affinityKeys: RuntimeSettingKey[] = [
+  'affinity_enabled',
+  'affinity_ttl',
+  'affinity_capacity',
+  'credential_concurrency_limit',
+]
 const browserAccessKeys: RuntimeSettingKey[] = ['cors', 'response_header_rules']
 const modelPriceKeys: RuntimeSettingKey[] = ['models_dev_auto_sync_enabled']
 
@@ -300,6 +305,10 @@ export function isValidAffinityCapacity(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 1 && value <= 1_000_000
 }
 
+export function isValidCredentialConcurrencyLimit(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 0 && value <= 64
+}
+
 export function isValidNonNegativeInteger(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0
 }
@@ -386,7 +395,9 @@ export function validateSettingsSection(draft: SettingsDraft, section: SettingsS
     return (
       (!draft.overrides.has('affinity_ttl') || isValidTimeout(draft.values.affinity_ttl)) &&
       (!draft.overrides.has('affinity_capacity') ||
-        isValidAffinityCapacity(draft.values.affinity_capacity))
+        isValidAffinityCapacity(draft.values.affinity_capacity)) &&
+      (!draft.overrides.has('credential_concurrency_limit') ||
+        isValidCredentialConcurrencyLimit(draft.values.credential_concurrency_limit))
     )
   }
   if (section === 'logs-maintenance') {

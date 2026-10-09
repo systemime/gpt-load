@@ -122,12 +122,20 @@ export default {
       enabledHelp:
         '無効の場合、明示的に有効化したグループのみアフィニティ対象を学習して再利用できます。',
       affinity_ttl: '既定の有効期間',
+      affinity_ttlHelp: 'アフィニティマッピングの生存期間。ヒットごとに残り時間が更新され、変更すると学習済みマッピングは消去されます。',
       affinity_ttlEffective: '{value} 秒',
       affinity_ttlError: '9,223,372,036 以下の正の安全な整数を入力してください。',
       affinity_capacity: 'キャッシュ容量',
+      affinity_capacityHelp: 'プロセス内アフィニティマッピングの LRU 上限。超過分は最も長く未使用のエントリから破棄されます。',
       affinity_capacityEffective: '{value} 件',
       affinity_capacityError: '1 から 1,000,000 までの整数を入力してください。',
+      credential_concurrency_limit: '認証情報ごとの同時実行上限',
+      credential_concurrency_limitHelp:
+        '単一認証情報の同時実行リクエスト数の上限。超過分は他の認証情報へ溢れてプロバイダのレート制限を回避します。0 は無制限。デフォルト 6 は実測に基づきます（チーム標準プラン 4 キー、2026-10-09）：K=2/4/6/8/10/12/16 の段階的負荷テストを複数回実施し、K≤6 はすべて成功して 429 ゼロ、K=8 は約 3 分の 1 のラウンドで 1 件失敗、K=10 はほぼ毎回 1〜3 件失敗、K=16 は全通過なし。1 キーの上限は約 8 同時、429 はコード 1302「アカウントのレート制限に到達」で、同時数と到着レートの複合制限とみられます。glm-5.3 と glm-5.3-flash は同じ上限で、制限はモデルではなくキー単位。推奨値は 8 − 2 の余裕。プラン変更後は 7〜8 に引き上げ、1302 が出たら戻してください。',
+      credential_concurrency_limitEffective: '{value} 同時',
+      credential_concurrency_limitError: '0 から 64 までの整数を入力してください（0 は無制限）。',
       entries: '件',
+      requests: '同時',
     },
     headers: {
       description: 'アップストリームへ送る前に設定・上書き・削除するリクエストヘッダーです。',

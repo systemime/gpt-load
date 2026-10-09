@@ -43,6 +43,7 @@ import SystemInfoSection from './SystemInfoSection.vue'
 import {
   createSettingsDraft,
   isValidAffinityCapacity,
+  isValidCredentialConcurrencyLimit,
   isValidNonNegativeInteger,
   isValidRetention,
   isValidTimeout,
@@ -209,6 +210,8 @@ const invalidKeys = computed<RuntimeSettingKey[]>(() => {
       return !isValidRetention(current.values.request_log_retention_days)
     if (key === 'affinity_capacity')
       return !isValidAffinityCapacity(current.values.affinity_capacity)
+    if (key === 'credential_concurrency_limit')
+      return !isValidCredentialConcurrencyLimit(current.values.credential_concurrency_limit)
     if (
       key === 'retry_count' ||
       key === 'blacklist_threshold' ||
@@ -333,7 +336,12 @@ function settingLabel(key: RuntimeSettingKey): string {
   if (key === 'jev') return t('jev.title')
   if (key === 'request_audit') return t('requestAudit.title')
   if (key === 'auto_model') return t('autoModel.title')
-  if (key === 'affinity_enabled' || key === 'affinity_ttl' || key === 'affinity_capacity')
+  if (
+    key === 'affinity_enabled' ||
+    key === 'affinity_ttl' ||
+    key === 'affinity_capacity' ||
+    key === 'credential_concurrency_limit'
+  )
     return t(`settings.affinity.${key}`)
   if (key === 'request_log_retention_days') return t('settings.logs.retention')
   if (key === 'header_rules') return t('settings.headers.blockTitle')
@@ -359,7 +367,8 @@ function sectionForKey(key: RuntimeSettingKey): SettingsSection {
     key === 'route_strategy' ||
     key === 'affinity_enabled' ||
     key === 'affinity_ttl' ||
-    key === 'affinity_capacity'
+    key === 'affinity_capacity' ||
+    key === 'credential_concurrency_limit'
   )
     return 'routing'
   if (
