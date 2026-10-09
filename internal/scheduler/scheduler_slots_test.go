@@ -69,6 +69,23 @@ func TestIteratorServesWhenAllCredentialsCapped(t *testing.T) {
 	if err != nil || selection.CredentialID == 0 {
 		t.Fatalf("Next() with all keys capped = (%#v, %v), want a selection instead of exhaustion", selection, err)
 	}
+	if !iterator.SelectionBeyondCap() {
+		t.Fatal("SelectionBeyondCap() = false, want exemption flag for admission layer")
+	}
+}
+
+func TestIteratorBeyondCapFlagFalseWhileSlotsAvailable(t *testing.T) {
+	source := fakeCredentialSource{keys: []state.CredentialMeta{
+		{ID: 11, GroupID: 1},
+	}}
+	slots := state.NewCredentialSlots(1)
+	iterator := New(schedulerSnapshot(), source, slotTestQuery(slots))
+	if _, err := iterator.Next(); err != nil {
+		t.Fatalf("Next() error = %v", err)
+	}
+	if iterator.SelectionBeyondCap() {
+		t.Fatal("SelectionBeyondCap() = true with free slots")
+	}
 }
 
 func TestIteratorIgnoresNilSlotSource(t *testing.T) {

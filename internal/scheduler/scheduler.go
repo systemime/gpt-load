@@ -80,6 +80,7 @@ type Iterator struct {
 	allowedCredentialIDs  map[uint]struct{}
 	preferredCredentialID uint
 	credentialSlots       *state.CredentialSlots
+	beyondCap             bool
 	tried                 map[uint]struct{}
 	skippedGroups         map[uint]struct{}
 	allowedCredentialRefs map[uint]credentialIdentity
@@ -311,7 +312,8 @@ func (iterator *Iterator) Next() (Selection, error) {
 		var found bool
 		now := iterator.now()
 		iterator.withWeightedPool(pool, []channel.RouteMode{channel.RouteNative, channel.RouteConverted}, now, func(weighted []weightedCredential) {
-			weighted = iterator.filterCappedCredentials(weighted)
+			var exempted bool
+			weighted, exempted = iterator.filterCappedCredentials(weighted)
 			weighted = iterator.priorityCandidates(pool, weighted)
 			for _, modes := range iterator.routeModeTiers {
 				eligible := make([]weightedCredential, 0, len(weighted))
@@ -327,6 +329,7 @@ func (iterator *Iterator) Next() (Selection, error) {
 				if !found {
 					continue
 				}
+				iterator.beyondCap = exempted
 				target = iterator.selectTarget(pool, modes, selected, now)
 				return
 			}
@@ -345,11 +348,11 @@ func (iterator *Iterator) Next() (Selection, error) {
 }
 
 // priorityCandidates 跨原生与转换选档；失败后降至下一可用档，最低档保留未试候选。
-// filterCappedCredentials 剔除在途已达 cap 的凭证; 全部达 cap 时保留原候选,
-// 由公平调度的在途语义兜底, 保证 cap 配置只会改变分布、不会制造不可用。
-func (iterator *Iterator) filterCappedCredentials(candidates []weightedCredential) []weightedCredential {
+// filterCappedCredentials 剔除在途已达 cap 的凭证; 全部达 cap 时保留原候选
+// 并返回 exempted=true, 由调用方透传给准入层强制放行, 保证 cap 永不制造不可用。
+func (iterator *Iterator) filterCappedCredentials(candidates []weightedCredential) ([]weightedCredential, bool) {
 	if iterator.credentialSlots == nil || len(candidates) == 0 {
-		return candidates
+		return candidates, false
 	}
 	available := make([]weightedCredential, 0, len(candidates))
 	for _, candidate := range candidates {
@@ -358,9 +361,15 @@ func (iterator *Iterator) filterCappedCredentials(candidates []weightedCredentia
 		}
 	}
 	if len(available) == 0 {
-		return candidates
+		return candidates, true
 	}
-	return available
+	return available, false
+}
+
+// SelectionBeyondCap 报告最近一次 Next() 的结果是否来自全池达 cap 的豁免候选。
+// 准入层据此决定强制放行而不是拒绝或换候选。
+func (iterator *Iterator) SelectionBeyondCap() bool {
+	return iterator != nil && iterator.beyondCap
 }
 
 func (iterator *Iterator) priorityCandidates(pool *candidatePool, candidates []weightedCredential) []weightedCredential {

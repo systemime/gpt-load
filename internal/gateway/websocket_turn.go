@@ -318,6 +318,10 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 	if requiredRef == nil {
 		query.PreferredCredentialID = affinity.preferredCredentialID
 	}
+	h.configureCredentialSlots(snapshot)
+	if requiredRef == nil {
+		query.CredentialSlots = h.credentialSlots
+	}
 	iterator := scheduler.New(snapshot, h.registry, query)
 	redactionCipher, err := h.encryption.NewRedactionCipher(key.ID)
 	if err != nil {
@@ -542,7 +546,23 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 			reject(*failure)
 			return
 		}
-		defer releaseGroup()
+		// 绑定轮次(响应续接)不设每凭证准入, 避免 cap 卡死单凭证会话。
+		releaseAttempt := releaseGroup
+		if requiredRef == nil {
+			if !h.credentialSlots.TryAcquire(selection.CredentialID) {
+				if !iterator.SelectionBeyondCap() {
+					releaseGroup()
+					continue
+				}
+				h.credentialSlots.ForceAcquire(selection.CredentialID)
+			}
+			acquiredCredential := selection.CredentialID
+			releaseAttempt = func() {
+				h.credentialSlots.Release(acquiredCredential)
+				releaseGroup()
+			}
+		}
+		defer releaseAttempt()
 		started := recorder.beforeForward()
 		forwardAttempts++
 		ctx, cancel := context.WithTimeout(requestCtx, selection.Group.Timeouts.Request)
@@ -610,7 +630,7 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 		}
 		cancel()
 		releaseInput()
-		releaseGroup()
+		releaseAttempt()
 		for _, name := range []string{"X-Request-Id", "Request-Id", "Openai-Request-Id", "X-Oai-Request-Id"} {
 			if value := result.Header.Get(name); value != "" && len(value) <= 1024 {
 				result.UpstreamRequestID = recorder.redactor.String(value, credential.secrets...)

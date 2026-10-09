@@ -75,6 +75,15 @@ func (slots *CredentialSlots) TryAcquire(id uint) bool {
 	}
 }
 
+// ForceAcquire 无视 cap 直接占一个槽位。仅在调度器判定全池达 cap、
+// 豁免放行候选时使用, 保证 cap 永不制造不可用。
+func (slots *CredentialSlots) ForceAcquire(id uint) {
+	if slots == nil {
+		return
+	}
+	slots.counter(id).Add(1)
+}
+
 // Release 归还一个槽位。计数器缺失或已归零时静默忽略, 防止负数。
 func (slots *CredentialSlots) Release(id uint) {
 	if slots == nil {

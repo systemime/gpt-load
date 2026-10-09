@@ -120,6 +120,7 @@ type Handler struct {
 	routeNotFoundEvents *utils.RateLimitedEventCounter
 	lifecycle           *httplifecycle.Coordinator
 	affinityCache       *affinity.Cache
+	credentialSlots     *state.CredentialSlots
 	responseBindings    *state.ResponseBindings
 	websocketLimits     websocketLimits
 	websocketBudget     websocketBudget
@@ -181,6 +182,7 @@ func NewHandler(
 		forwarder: forwarder, dialects: dialects, stats: stats, mutations: mutations,
 		limiter: limiter, requestLogSink: requestLogSink, priceTables: priceTables,
 		affinityCache:    affinity.NewCache(),
+		credentialSlots:  state.NewCredentialSlots(0),
 		responseBindings: state.NewResponseBindings(),
 		websocketLimits:  defaultWebsocketLimits(),
 		liveSessions:     newLiveSessions(),
@@ -721,6 +723,8 @@ func (handler *Handler) Handle(ginContext *gin.Context) {
 		)
 		query.PreferredCredentialID = requestAffinity.preferredCredentialID
 	}
+	handler.configureCredentialSlots(snapshot)
+	query.CredentialSlots = handler.credentialSlots
 	iterator := scheduler.New(snapshot, handler.registry, query)
 	handler.executeAttempts(
 		ginContext,
@@ -1283,8 +1287,26 @@ func (handler *Handler) executeAttempts(
 				return
 			}
 		}
+		// 每凭证在途准入: 响应续接(单凭证硬绑定)不设限, 其余请求满 cap 时换候选;
+		// 全池达 cap 的豁免候选(调度器标记)强制放行, cap 永不制造不可用。
+		releaseAttempt := releaseGroup
+		if originalMetadata.PreviousResponseID == "" &&
+			!handler.credentialSlots.TryAcquire(selection.CredentialID) {
+			if !iterator.SelectionBeyondCap() {
+				releaseGroup()
+				continue
+			}
+			handler.credentialSlots.ForceAcquire(selection.CredentialID)
+		}
+		if originalMetadata.PreviousResponseID == "" {
+			acquiredCredential := selection.CredentialID
+			releaseAttempt = func() {
+				handler.credentialSlots.Release(acquiredCredential)
+				releaseGroup()
+			}
+		}
 		// 异常退出也收尾；普通路径在本次执行结束后立即归还，幂等保护防止重复释放。
-		defer releaseGroup()
+		defer releaseAttempt()
 		attemptSequence++
 		forwardAttempts++
 		if attemptSequence == 1 && (originalMetadata.PreviousResponseID != "" ||
@@ -1362,7 +1384,7 @@ func (handler *Handler) executeAttempts(
 		} else {
 			result = handler.forwarder.Forward(ginContext.Request.Context(), input)
 		}
-		releaseGroup()
+		releaseAttempt()
 		result = normalizeUpstreamResultContract(result)
 		if !stream && result.HasResponse() && !result.ProviderErrorBeforeCommit &&
 			result.DispatchState != execution.DispatchLocal &&

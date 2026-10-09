@@ -16,6 +16,15 @@ type requestAffinity struct {
 	kind                  string
 }
 
+// configureCredentialSlots 把快照里的全局 cap 应用到在途准入计数器。
+// 与亲和缓存同款模式: 每请求调用, 阈值存储为原子值, 开销可忽略。
+func (handler *Handler) configureCredentialSlots(snapshot *state.ConfigSnapshot) {
+	if handler == nil || handler.credentialSlots == nil || snapshot == nil {
+		return
+	}
+	handler.credentialSlots.Configure(snapshot.Settings.CredentialConcurrencyLimit)
+}
+
 func (handler *Handler) resolveRequestAffinity(
 	snapshot *state.ConfigSnapshot,
 	accessKeyID uint,
