@@ -1,9 +1,25 @@
 {
   "version": 1,
   "routes": [
-    { "name": "monitor-usage", "path": "/monitor/usage" },
-    { "name": "monitor-logs", "path": "/monitor/logs" },
-    { "name": "monitor-health", "path": "/monitor/health" },
-    { "name": "monitor-inspector", "path": "/monitor/inspector" }
+    {
+      "name": "monitor-usage",
+      "path": "/monitor/usage"
+    },
+    {
+      "name": "monitor-logs",
+      "path": "/monitor/logs"
+    },
+    {
+      "name": "monitor-health",
+      "path": "/monitor/health"
+    },
+    {
+      "name": "monitor-inspector",
+      "path": "/monitor/inspector"
+    },
+    {
+      "name": "monitor-credential-load",
+      "path": "/monitor/credential-load"
+    }
   ]
 }

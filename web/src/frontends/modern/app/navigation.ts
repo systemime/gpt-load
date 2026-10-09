@@ -3,6 +3,7 @@ import {
   Network,
   Boxes,
   ChartNoAxesCombined,
+  Gauge,
   House,
   KeyRound,
   Layers2,
@@ -76,6 +77,14 @@ export const navigationItems = [
     path: pagePath('monitor-health'),
     section: 'observe',
     icon: Activity,
+    adminOnly: true,
+  },
+  {
+    id: 'credentialLoad',
+    name: 'modern-credential-load',
+    path: pagePath('monitor-credential-load'),
+    section: 'observe',
+    icon: Gauge,
     adminOnly: true,
   },
   {

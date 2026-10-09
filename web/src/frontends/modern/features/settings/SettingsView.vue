@@ -98,7 +98,13 @@ const sectionIDs = [
 ] as const
 type SectionID = (typeof sectionIDs)[number]
 const sectionFields: Record<SectionID, readonly SettingKey[]> = {
-  routing: ['route_strategy', 'affinity_enabled', 'affinity_ttl', 'affinity_capacity'],
+  routing: [
+    'route_strategy',
+    'affinity_enabled',
+    'affinity_ttl',
+    'affinity_capacity',
+    'credential_concurrency_limit',
+  ],
   connection: [
     'global_concurrency_limit',
     'default_access_key_concurrency_limit',
@@ -146,7 +152,11 @@ const reliability: readonly SettingNumber[] = [
   'blacklist_threshold',
   'validation_interval',
 ]
-const affinityNumbers: readonly SettingNumber[] = ['affinity_ttl', 'affinity_capacity']
+const affinityNumbers: readonly SettingNumber[] = [
+  'affinity_ttl',
+  'affinity_capacity',
+  'credential_concurrency_limit',
+]
 const headerKeys = ['header_rules', 'response_header_rules'] as const
 const corsLists = ['allowed_methods', 'allowed_headers', 'exposed_headers'] as const
 const state = useURLState(

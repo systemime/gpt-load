@@ -27,6 +27,7 @@ export const zhCN = {
   seconds: '秒',
   times: '次',
   entries: '条',
+  requests: '个并发',
   days: '天',
   sections: {
     redaction: '请求脱敏',
@@ -62,6 +63,7 @@ export const zhCN = {
     affinity_enabled: '请求亲和',
     affinity_ttl: '亲和有效期',
     affinity_capacity: '亲和缓存容量',
+    credential_concurrency_limit: '每凭证并发上限',
     empty_response_retry: '空回检测',
     responses_websocket_enabled: 'Responses WebSocket',
     proxy_config: '上游代理',
@@ -93,6 +95,8 @@ export const zhCN = {
     affinity_enabled: '复用上次命中的路由目标；分组可单独覆盖。',
     affinity_ttl: '亲和记录的默认保留时长。',
     affinity_capacity: '最多保留的亲和记录数，范围为 1–1,000,000。',
+    credential_concurrency_limit:
+      '单个凭证同时在途的请求数上限，超出部分溢出到其他凭证以规避厂商限流；0 表示不限制。默认 6 依据团队标准版实测（2026-10-09，4 key 阶梯加压多轮）：K≤6 全部通过零 429，K=8 约 1/3 轮次被限 1 条，K=10 几乎每轮被限 1–3 条，K=16 无一全过；硬顶约 8 并发，429 为 1302 速率限制，与模型无关。建议 8−2 余量；套餐升档可上调，出 1302 再回调。',
     responses_websocket_enabled: '关闭会断开受影响的 WebSocket 连接并中断生成，HTTP/SSE 不受影响。',
     empty_response_retry:
       '仅流式对话生效。上游正常结束却没有任何产出时换下一个候选重试，不冷却也不拉黑凭据；预热与会话续接请求不参与判定。',
@@ -208,6 +212,7 @@ export const enUS = {
   seconds: 'sec',
   times: 'times',
   entries: 'entries',
+  requests: 'concurrent',
   days: 'days',
   sections: {
     redaction: 'Request redaction',
@@ -243,6 +248,7 @@ export const enUS = {
     affinity_enabled: 'Request affinity',
     affinity_ttl: 'Affinity lifetime',
     affinity_capacity: 'Affinity cache capacity',
+    credential_concurrency_limit: 'Per-credential concurrency cap',
     empty_response_retry: 'Empty response detection',
     responses_websocket_enabled: 'Responses WebSocket',
     proxy_config: 'Upstream proxy',
@@ -277,6 +283,8 @@ export const enUS = {
     auto_model: 'Jev selects a preset; existing scheduling chooses the Group and credential.',
     affinity_ttl: 'Default lifetime of affinity records.',
     affinity_capacity: 'Maximum affinity records, from 1 to 1,000,000.',
+    credential_concurrency_limit:
+      'Maximum in-flight requests per credential; excess overflows to other credentials to avoid provider rate limits. 0 means unlimited. Default 6 comes from measured Team Standard behavior (2026-10-09, 4 keys, ramped bursts): K<=6 always passed with zero 429s, K=8 lost 1 request in about 1 of 3 rounds, K=10 lost 1-3 almost every round, K=16 never fully passed. Hard ceiling is about 8 concurrent per key (429 code 1302), independent of model. Recommended 8-2 headroom; raise after plan upgrades, lower again if 1302 appears.',
     responses_websocket_enabled:
       'Disabling disconnects affected WebSocket sessions and interrupts generation. HTTP/SSE is unaffected.',
     empty_response_retry:
@@ -398,6 +406,7 @@ export const jaJP = {
   seconds: '秒',
   times: '回',
   entries: '件',
+  requests: '同時',
   days: '日',
   sections: {
     redaction: 'リクエストのマスキング',
@@ -433,6 +442,7 @@ export const jaJP = {
     affinity_enabled: 'リクエスト親和性',
     affinity_ttl: '親和性の有効期間',
     affinity_capacity: '親和性キャッシュ容量',
+    credential_concurrency_limit: '認証情報ごとの同時実行上限',
     empty_response_retry: '空応答の検出',
     responses_websocket_enabled: 'Responses WebSocket',
     proxy_config: '上流プロキシ',
@@ -467,6 +477,8 @@ export const jaJP = {
     auto_model: 'Jev がプリセットを選び、既存の経路がグループと認証情報を選択します。',
     affinity_ttl: '親和性レコードの既定保持時間。',
     affinity_capacity: '親和性レコードの上限。1～1,000,000 件。',
+    credential_concurrency_limit:
+      '単一認証情報の同時実行リクエスト上限。超過分は他の認証情報へ溢れてプロバイダの制限を回避します。0 は無制限。デフォルト 6 はチーム標準プランの実測（2026-10-09、4 キー段階加圧）に基づきます。K≤6 は全通過・429 ゼロ、K=8 は約 3 分の 1 のラウンドで 1 件失敗、K=10 はほぼ毎回 1～3 件失敗、K=16 は全通過なし。上限は約 8 同時（429 コード 1302）、モデルとは無関係。推奨は 8−2 の余裕。プラン変更後は引き上げ、1302 が出たら戻してください。',
     responses_websocket_enabled:
       '無効にすると対象の WebSocket 接続を切断し生成を中断します。HTTP/SSE には影響しません。',
     empty_response_retry:
