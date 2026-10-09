@@ -75,6 +75,7 @@ type CredentialRef struct {
 
 type CredentialRegistry struct {
 	scheduling       *SchedulingState
+	slots            *CredentialSlots
 	mu               sync.RWMutex
 	buckets          map[uint]map[uint]*CredentialEntry
 	credentialGroups map[uint]uint
@@ -83,9 +84,19 @@ type CredentialRegistry struct {
 func NewCredentialRegistry() *CredentialRegistry {
 	return &CredentialRegistry{
 		scheduling:       NewSchedulingState(),
+		slots:            NewCredentialSlots(0),
 		buckets:          make(map[uint]map[uint]*CredentialEntry),
 		credentialGroups: make(map[uint]uint),
 	}
+}
+
+// Slots 返回与本注册表同生命周期的每凭证在途准入计数器。
+// 网关执行路径与管理端负载查询共享同一实例。
+func (r *CredentialRegistry) Slots() *CredentialSlots {
+	if r == nil || r.slots == nil {
+		return NewCredentialSlots(0)
+	}
+	return r.slots
 }
 
 func ValidateCredentialEntries(entries []CredentialEntry) error {

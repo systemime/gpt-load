@@ -182,7 +182,7 @@ func NewHandler(
 		forwarder: forwarder, dialects: dialects, stats: stats, mutations: mutations,
 		limiter: limiter, requestLogSink: requestLogSink, priceTables: priceTables,
 		affinityCache:    affinity.NewCache(),
-		credentialSlots:  state.NewCredentialSlots(0),
+		credentialSlots:  registry.Slots(),
 		responseBindings: state.NewResponseBindings(),
 		websocketLimits:  defaultWebsocketLimits(),
 		liveSessions:     newLiveSessions(),
