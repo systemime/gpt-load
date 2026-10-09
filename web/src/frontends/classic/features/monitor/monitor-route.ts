@@ -15,7 +15,7 @@ import {
 } from './usage-filters'
 import { normalizeMonitorText } from './filter-validation'
 
-export type MonitorTab = 'health' | 'logs' | 'inspector' | 'usage'
+export type MonitorTab = 'health' | 'logs' | 'inspector' | 'usage' | 'credentials'
 export interface HealthMonitorState {
   groupsExpanded: boolean
 }
@@ -46,7 +46,7 @@ const requestIDPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3
 const logCursorPattern = /^[A-Za-z0-9_-]{1,512}$/u
 
 export function normalizeMonitorTab(raw: unknown): MonitorTab {
-  return raw === 'logs' || raw === 'inspector' || raw === 'usage' || raw === 'health'
+  return raw === 'logs' || raw === 'inspector' || raw === 'usage' || raw === 'health' || raw === 'credentials'
     ? raw
     : 'health'
 }

@@ -39,6 +39,7 @@ import { parseAppliedUsageFilters } from './usage-filters'
 const InspectorTab = lazySurface(() => import('./InspectorTab.vue'))
 const LogsTab = lazySurface(() => import('./LogsTab.vue'))
 const UsageTab = lazySurface(() => import('./UsageTab.vue'))
+const CredentialLoadTab = lazySurface(() => import('./CredentialLoadTab.vue'))
 
 const route = useRoute()
 const session = useAuthSession()
@@ -85,6 +86,7 @@ const items = computed<AppTabItem[]>(() => {
     : [
         { value: 'health', label: t('monitor.tabs.health') },
         ...shared,
+        { value: 'credentials', label: t('monitor.tabs.credentials') },
         { value: 'inspector', label: t('monitor.tabs.inspector') },
       ]
 })
@@ -406,6 +408,9 @@ function applyTimeRange(from: number, to: number, preset?: DateTimePreset): void
               :filters="usageFilters"
               @time-range-resolved="updateResolvedTimeRange"
             />
+          </div>
+          <div v-else-if="activeTab === 'credentials'" class="monitor-panel">
+            <CredentialLoadTab />
           </div>
           <div v-else class="monitor-panel">
             <InspectorTab />

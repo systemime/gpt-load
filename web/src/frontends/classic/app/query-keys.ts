@@ -95,6 +95,7 @@ export const controlQueryKeys = {
     list: (search: string) => ['control', 'channels', 'list', search] as const,
   },
   health: () => ['control', 'health'] as const,
+  credentialLoad: () => ['control', 'credential-load'] as const,
   logs: {
     all: ['control', 'logs'] as const,
     list: (filters: RequestLogFilters) =>
