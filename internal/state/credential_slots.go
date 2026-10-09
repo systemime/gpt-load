@@ -110,3 +110,15 @@ func (slots *CredentialSlots) Inflight(id uint) int64 {
 	}
 	return counter.Load()
 }
+
+// Available 报告该凭证是否仍在准入阈值内, 供调度器过滤候选。
+func (slots *CredentialSlots) Available(id uint) bool {
+	if slots == nil {
+		return true
+	}
+	capacity := slots.capacity.Load()
+	if capacity <= 0 {
+		return true
+	}
+	return slots.Inflight(id) < capacity
+}

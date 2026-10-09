@@ -31,6 +31,10 @@ type Query struct {
 	PreferredCredentialID    uint
 	AllowedCredentialRefs    map[uint]state.CredentialRef
 
+	// CredentialSlots 非 nil 时, 在途数达 cap 的凭证不进入候选;
+	// 全池达 cap 时豁免过滤(退化为在途最少者优先), 保证不比无 cap 更差。
+	CredentialSlots *state.CredentialSlots
+
 	// ResponsesWebsocket 非 nil 时按原生 WS 合同准入，不要求 HTTP 资源接口。
 	ResponsesWebsocket *execution.WebsocketCapabilities
 }
@@ -75,6 +79,7 @@ type Iterator struct {
 	routeModeTiers        [][]channel.RouteMode
 	allowedCredentialIDs  map[uint]struct{}
 	preferredCredentialID uint
+	credentialSlots       *state.CredentialSlots
 	tried                 map[uint]struct{}
 	skippedGroups         map[uint]struct{}
 	allowedCredentialRefs map[uint]credentialIdentity
@@ -140,6 +145,7 @@ func newWithClock(
 		routeModeTiers:        [][]channel.RouteMode{{channel.RouteNative}, {channel.RouteConverted}},
 		allowedCredentialIDs:  cloneAllowedCredentialIDs(query),
 		preferredCredentialID: query.PreferredCredentialID,
+		credentialSlots:       query.CredentialSlots,
 		tried:                 make(map[uint]struct{}),
 		skippedGroups:         make(map[uint]struct{}),
 		now:                   now,
@@ -305,6 +311,7 @@ func (iterator *Iterator) Next() (Selection, error) {
 		var found bool
 		now := iterator.now()
 		iterator.withWeightedPool(pool, []channel.RouteMode{channel.RouteNative, channel.RouteConverted}, now, func(weighted []weightedCredential) {
+			weighted = iterator.filterCappedCredentials(weighted)
 			weighted = iterator.priorityCandidates(pool, weighted)
 			for _, modes := range iterator.routeModeTiers {
 				eligible := make([]weightedCredential, 0, len(weighted))
@@ -338,6 +345,24 @@ func (iterator *Iterator) Next() (Selection, error) {
 }
 
 // priorityCandidates 跨原生与转换选档；失败后降至下一可用档，最低档保留未试候选。
+// filterCappedCredentials 剔除在途已达 cap 的凭证; 全部达 cap 时保留原候选,
+// 由公平调度的在途语义兜底, 保证 cap 配置只会改变分布、不会制造不可用。
+func (iterator *Iterator) filterCappedCredentials(candidates []weightedCredential) []weightedCredential {
+	if iterator.credentialSlots == nil || len(candidates) == 0 {
+		return candidates
+	}
+	available := make([]weightedCredential, 0, len(candidates))
+	for _, candidate := range candidates {
+		if iterator.credentialSlots.Available(candidate.meta.ID) {
+			available = append(available, candidate)
+		}
+	}
+	if len(available) == 0 {
+		return candidates
+	}
+	return available
+}
+
 func (iterator *Iterator) priorityCandidates(pool *candidatePool, candidates []weightedCredential) []weightedCredential {
 	var priority, lower int32
 	var found, lowerFound bool
