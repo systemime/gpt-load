@@ -161,3 +161,36 @@ func TestHandlerQueueWakesOnOtherKeyReleaseAndRepicks(t *testing.T) {
 	<-done
 	assertAffinityAttemptKeys(t, forwarder.inputs, []string{"sk-two"})
 }
+
+// 回归: 重试路径(429 换凭证重试成功)结束后, 所有涉及凭证的在途计数必须归零
+// —— 同时覆盖双重释放(净多扣导致负数被 floor 吞掉)与早退泄漏两种账本破坏。
+func TestHandlerSlotsReturnToZeroAfterRetryPath(t *testing.T) {
+	forwarder := &scriptedForwarder{results: []UpstreamResult{
+		successfulAffinityResult(),
+		{
+			StatusCode:         http.StatusTooManyRequests,
+			Header:             http.Header{"Retry-After": {"30"}},
+			Body:               []byte(`{"error":"rate_limit"}`),
+			ClassificationBody: []byte(`{"error":"rate_limit"}`),
+			RequestWritten:     true,
+		},
+		successfulAffinityResult(),
+	}}
+	handler, manager, _ := newHandlerForTest(t, forwarder, "sk-one", "sk-two")
+	sink := &recordingRequestLogSink{}
+	handler.requestLogSink = sink
+
+	snapshot := manager.Current()
+	snapshot.Settings.RetryCount = 2
+
+	engine := newAffinityTestEngine(t, handler)
+	body := `{"model":"gpt-4o","messages":[{"role":"user","content":"retry accounting"}]}`
+	serveAffinityRequest(t, engine, body)
+	serveAffinityRequest(t, engine, body)
+
+	for _, id := range []uint{1, 2} {
+		if inflight := handler.credentialSlots.Inflight(id); inflight != 0 {
+			t.Fatalf("credential %d inflight = %d after completion, want 0", id, inflight)
+		}
+	}
+}

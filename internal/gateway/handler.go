@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -1154,8 +1155,8 @@ func (handler *Handler) executeAttempts(
 		// 每凭证在途准入(候选准备前, 保证重选后的 selection/ref 贯穿解密与转发):
 		// 响应续接不设限; 满 cap 且有其他候选时换候选; 全池达 cap 走预算档
 		// 每次评估重选(阶段 2), 重选后重建 Selection; 超深/超时 429。
-		if originalMetadata.PreviousResponseID == "" &&
-			!handler.credentialSlots.TryAcquire(selection.CredentialID) {
+		trackCredentialSlot := originalMetadata.PreviousResponseID == ""
+		if trackCredentialSlot && !handler.credentialSlots.TryAcquire(selection.CredentialID) {
 			if !iterator.SelectionBeyondCap() {
 				continue
 			}
@@ -1168,6 +1169,20 @@ func (handler *Handler) executeAttempts(
 				return
 			}
 		}
+		// 槽位占用即登记释放: OnceFunc 幂等, 显式调用与 defer 双保险,
+		// 本轮全部 continue/return/panic 路径都恰好释放一次(修复早退泄漏与双重释放)。
+		releaseGroup := func() {}
+		acquiredCredentialID := selection.CredentialID
+		releaseAttempt := sync.OnceFunc(func() {
+			if trackCredentialSlot {
+				handler.credentialSlots.Release(acquiredCredentialID)
+			}
+			// 快照过期时 acquireGroupConcurrency 返回 (nil, failure), 此处不可裸调。
+			if releaseGroup != nil {
+				releaseGroup()
+			}
+		})
+		defer releaseAttempt()
 		encrypted, active := handler.registry.ActiveEncryptedCredentialDataIfMatch(ref)
 		if !active {
 			continue
@@ -1300,7 +1315,6 @@ func (handler *Handler) executeAttempts(
 			recorder.completeCanceled(ginContext.Request.Context(), 0, lastAttemptIndex)
 			return
 		}
-		releaseGroup := func() {}
 		if operation != execution.OperationResponsesCancel {
 			var failure *reason
 			releaseGroup, failure = handler.acquireGroupConcurrency(selection.GroupID)
@@ -1309,18 +1323,6 @@ func (handler *Handler) executeAttempts(
 				return
 			}
 		}
-		// 每凭证在途准入: 响应续接(单凭证硬绑定)不设限。
-		// 已在候选准备前完成 TryAcquire/预算档重选, 此处只登记释放。
-		releaseAttempt := releaseGroup
-		if originalMetadata.PreviousResponseID == "" {
-			acquiredCredential := selection.CredentialID
-			releaseAttempt = func() {
-				handler.credentialSlots.Release(acquiredCredential)
-				releaseGroup()
-			}
-		}
-		// 异常退出也收尾；普通路径在本次执行结束后立即归还，幂等保护防止重复释放。
-		defer releaseAttempt()
 		attemptSequence++
 		forwardAttempts++
 		if attemptSequence == 1 && (originalMetadata.PreviousResponseID != "" ||

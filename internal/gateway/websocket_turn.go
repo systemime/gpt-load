@@ -549,21 +549,22 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 			return
 		}
 		// 绑定轮次(响应续接)不设每凭证准入, 避免 cap 卡死单凭证会话。
-		releaseAttempt := releaseGroup
-		if requiredRef == nil {
-			if !h.credentialSlots.TryAcquire(selection.CredentialID) {
-				if !iterator.SelectionBeyondCap() {
-					releaseGroup()
-					continue
-				}
-				h.credentialSlots.ForceAcquire(selection.CredentialID)
-			}
-			acquiredCredential := selection.CredentialID
-			releaseAttempt = func() {
-				h.credentialSlots.Release(acquiredCredential)
+		// OnceFunc 幂等: 显式调用与 defer 双保险, 恰好释放一次。
+		acquiredCredential := selection.CredentialID
+		trackCredentialSlot := requiredRef == nil
+		if trackCredentialSlot && !h.credentialSlots.TryAcquire(selection.CredentialID) {
+			if !iterator.SelectionBeyondCap() {
 				releaseGroup()
+				continue
 			}
+			h.credentialSlots.ForceAcquire(selection.CredentialID)
 		}
+		releaseAttempt := sync.OnceFunc(func() {
+			if trackCredentialSlot {
+				h.credentialSlots.Release(acquiredCredential)
+			}
+			releaseGroup()
+		})
 		defer releaseAttempt()
 		started := recorder.beforeForward()
 		forwardAttempts++

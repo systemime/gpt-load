@@ -1,6 +1,7 @@
 package state
 
 import (
+	"math"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -77,9 +78,13 @@ func (slots *CredentialSlots) limitFor(id uint) int64 {
 	return slots.capacity.Load()
 }
 
-// BudgetFor 返回该凭证的预算档 = 生效 cap + 固定浮动。
+// BudgetFor 返回该凭证的预算档 = 生效 cap + 固定浮动; 不限时为极大值。
 func (slots *CredentialSlots) BudgetFor(id uint) int64 {
-	return slots.limitFor(id) + CredentialQueueSlack
+	limit := slots.limitFor(id)
+	if limit <= 0 {
+		return math.MaxInt64
+	}
+	return limit + CredentialQueueSlack
 }
 
 // EffectiveLimit 返回该凭证生效 cap, 供展示。
@@ -178,10 +183,12 @@ func (slots *CredentialSlots) AcquireWithinWait(
 	defer waiter.Add(-1)
 	deadline := time.After(timeout)
 	for {
+		// 先取通道再尝试: 尝试失败后 select 期间发生的释放必然关闭本通道,
+		// 消除"检查与登记之间"的丢失唤醒窗口。
+		notify := slots.notifyChannel()
 		if slots.TryAcquireWithin(id, limit) {
 			return true
 		}
-		notify := slots.notifyChannel()
 		select {
 		case <-notify:
 		case <-deadline:
@@ -219,10 +226,11 @@ func (slots *CredentialSlots) AcquireAnyWithin(
 	}()
 	deadline := time.After(timeout)
 	for {
+		// 先取通道再尝试, 同 AcquireWithinWait 的丢失唤醒修复。
+		notify := slots.notifyChannel()
 		if id, ok := slots.tryAcquireAnyWithin(ids, preferred); ok {
 			return id, true
 		}
-		notify := slots.notifyChannel()
 		select {
 		case <-notify:
 		case <-deadline:

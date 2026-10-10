@@ -48,8 +48,7 @@ func (handler *Handler) admitBeyondCap(
 ) (scheduler.Selection, state.CredentialRef, bool) {
 	ref := allowedCredentialRefs[selection.CredentialID]
 	slots := handler.credentialSlots
-	capacity := slots.Capacity()
-	if capacity <= 0 {
+	if slots.EffectiveLimit(selection.CredentialID) <= 0 {
 		slots.ForceAcquire(selection.CredentialID)
 		return selection, ref, true
 	}
@@ -110,6 +109,8 @@ func (handler *Handler) selectionForBudgetCredential(
 	}
 	ref, allowed := allowedCredentialRefs[credentialID]
 	if !allowed {
+		// 重选键不可用: 归还其槽位后回落原选择, 不泄漏。
+		handler.credentialSlots.Release(credentialID)
 		handler.credentialSlots.ForceAcquire(fallback.CredentialID)
 		return fallback, fallbackRef, true
 	}
@@ -122,6 +123,8 @@ func (handler *Handler) selectionForBudgetCredential(
 	scopedIterator := scheduler.New(snapshot, handler.registry, scoped)
 	selection, err := scopedIterator.Next()
 	if err != nil || selection.CredentialID != credentialID {
+		// 重建失败(weight=0/冷却/目标不可用等): 归还重选键槽位, 强制回落原选择。
+		handler.credentialSlots.Release(credentialID)
 		handler.credentialSlots.ForceAcquire(fallback.CredentialID)
 		return fallback, fallbackRef, true
 	}

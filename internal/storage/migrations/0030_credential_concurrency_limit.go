@@ -9,7 +9,7 @@ import (
 
 const ID0030 = "0030_credential_concurrency_limit"
 
-// Up0030 为单个凭据增加并发上限覆盖列: NULL 表示跟随全局
+// Up0030 为单个凭据增加并发上限覆盖列: NULL/0 表示跟随全局
 // credential_concurrency_limit, 1..64 为该凭据独立上限。
 func Up0030(db *gorm.DB) error {
 	if err := ValidateRecoverable0030(db); err != nil {

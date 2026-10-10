@@ -118,7 +118,8 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 	}
 
 	views := service.registry.Snapshot()
-	pressures := credentialPressures(views, service.registry.UsageTracker().SnapshotAll())
+	usageSnapshot := service.registry.UsageTracker().SnapshotAll()
+	pressures := credentialPressures(views, usageSnapshot)
 
 	result := credentialLoadResponse{
 		ObservedAtMS: observedAt,
@@ -126,7 +127,6 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 		Credentials:  make([]credentialLoadItem, 0, len(views)),
 		LocalRejects: localRejects,
 	}
-	usageSnapshot := service.registry.UsageTracker().SnapshotAll()
 	for _, view := range views {
 		usage := usageSnapshot[view.ID]
 		item := credentialLoadItem{
