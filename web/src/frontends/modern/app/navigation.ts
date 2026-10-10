@@ -80,6 +80,14 @@ export const navigationItems = [
     adminOnly: true,
   },
   {
+    id: 'usageOverview',
+    name: 'modern-usage-overview',
+    path: pagePath('monitor-usage-overview'),
+    section: 'observe',
+    icon: ChartNoAxesCombined,
+    adminOnly: true,
+  },
+  {
     id: 'credentialLoad',
     name: 'modern-credential-load',
     path: pagePath('monitor-credential-load'),

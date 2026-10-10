@@ -11,6 +11,7 @@ import { enUS as logs } from './logs'
 import { enUS as usage } from './usage'
 import { enUS as health } from './health'
 import { enUS as credentialLoad } from './credential-load'
+import {enUS as usageOverview } from './usage-overview'
 import { enUS as credentialCards } from './credential-cards'
 import { enUS as groupWorkflows } from './group-workflows'
 import { enUS as parameterRules } from './parameter-rules'
@@ -37,6 +38,7 @@ export default {
   usage,
   health,
   credentialLoad,
+  usageOverview,
   accessKeys,
   groupWorkflows,
   parameterRules,
@@ -120,6 +122,7 @@ export default {
     usage: { title: 'Usage' },
     logs: { title: 'Request logs' },
     health: { title: 'Runtime health' },
+    usageOverview: { title: 'Usage totals' },
     credentialLoad: { title: 'Credential load' },
     inspector: { title: 'Route inspection' },
     settings: { title: 'Global settings' },

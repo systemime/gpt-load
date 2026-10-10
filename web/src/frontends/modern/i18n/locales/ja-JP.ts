@@ -11,6 +11,7 @@ import { jaJP as logs } from './logs'
 import { jaJP as usage } from './usage'
 import { jaJP as health } from './health'
 import { jaJP as credentialLoad } from './credential-load'
+import {jaJP as usageOverview } from './usage-overview'
 import { jaJP as credentialCards } from './credential-cards'
 import { jaJP as groupWorkflows } from './group-workflows'
 import { jaJP as parameterRules } from './parameter-rules'
@@ -37,6 +38,7 @@ export default {
   usage,
   health,
   credentialLoad,
+  usageOverview,
   accessKeys,
   groupWorkflows,
   parameterRules,
@@ -119,6 +121,7 @@ export default {
     usage: { title: '使用量' },
     logs: { title: 'リクエストログ' },
     health: { title: '稼働状況' },
+    usageOverview: { title: '累計使用量' },
     credentialLoad: { title: '認証情報負荷' },
     inspector: { title: 'ルート検査' },
     settings: { title: 'グローバル設定' },

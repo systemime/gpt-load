@@ -20,6 +20,10 @@
     {
       "name": "monitor-credential-load",
       "path": "/monitor/credential-load"
+    },
+    {
+      "name": "monitor-usage-overview",
+      "path": "/monitor/usage-overview"
     }
   ]
 }

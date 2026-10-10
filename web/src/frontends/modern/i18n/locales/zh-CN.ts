@@ -11,6 +11,7 @@ import { zhCN as logs } from './logs'
 import { zhCN as usage } from './usage'
 import { zhCN as health } from './health'
 import { zhCN as credentialLoad } from './credential-load'
+import {zhCN as usageOverview } from './usage-overview'
 import { zhCN as credentialCards } from './credential-cards'
 import { zhCN as groupWorkflows } from './group-workflows'
 import { zhCN as parameterRules } from './parameter-rules'
@@ -37,6 +38,7 @@ export default {
   usage,
   health,
   credentialLoad,
+  usageOverview,
   accessKeys,
   groupWorkflows,
   parameterRules,
@@ -116,6 +118,7 @@ export default {
     usage: { title: '用量统计' },
     logs: { title: '请求日志' },
     health: { title: '运行健康' },
+    usageOverview: { title: '累计用量' },
     credentialLoad: { title: '凭证负载' },
     inspector: { title: '路由检查' },
     settings: { title: '全局设置' },
