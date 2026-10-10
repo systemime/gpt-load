@@ -169,3 +169,36 @@
 - 单测：并发 24 请求 × 2 key(cap6) → 16 立即放行、8 排队、陆续放行无 429；深度超限/超时路径；
 - 压测：排队开启后 `upstream_rate_limited`（5h 异常表）归零；
 - 缓存率影响：排队请求最终仍走原 preferred（等待的就是它的槽位），缓存损失接近零 —— 这是排队优于"溢出到别的 key"的关键收益。
+
+---
+
+## 六、阶段 3：用量均衡（5h/7d 相对份额反馈，默认关闭）
+
+> 需求：防止某个 coding plan key 用量过多。开启后，新分派优先给窗口内用量份额低的 key。
+> 机制定位：cap 管瞬时并发、queue 管突发、fair 管分派次数公平 —— 本层管**累计用量**的反馈修正。
+
+### 语义
+
+- **压力** = 实际份额 / 目标份额。实际份额 = 该 key 窗口内消耗占比；目标份额 = 有效权重占比；
+- 双窗口取 max（滚动 5h、滚动 7d —— 滚动 ≥ 日历周用量，转向更早更保守）；双指标取 max（请求数为主、token 为辅）；
+- **仅影响新分派**（亲和首次绑定 / 溢出 / 排队放行），已钉住会话不动 —— 缓存零损失；
+- 比较链：`preferred(亲和) > 压力升序 > fair 进度升序`；全零窗口或单候选自动回落现状；
+- 不改 weight 配置语义。
+
+### 实现
+
+| # | 位置 | 内容 |
+|---|---|---|
+| 1 | `state/credential_usage.go` | `CredentialUsage`（5h/7d × 请求数/token）+ `CredentialUsageTracker`（RWMutex 内存表，Refresh/Usage） |
+| 2 | `state/registry.go` | `usageTracker` 挂载 `CredentialRegistry`（与 Slots 同模式，网关/控制面共享） |
+| 3 | `state/runtime_settings.go` | `credential_usage_balance_enabled`（默认 **false**） |
+| 4 | `requestlog/service.go` | `CredentialWindowUsage(ctx)`：按凭证聚合 5h/7d 请求与 token（复用负载端点同款 SQL 口径） |
+| 5 | `control/runtime.go` | 后台 60s 刷新循环（Run(ctx) 内，类型断言 requestlog.Service 能力，写回 registry tracker） |
+| 6 | `scheduler` | Query 增 `CredentialUsage` 视图 + `UsageBalance` 开关；`selectCredential` 比较链插入压力档 |
+| 7 | `gateway` | HTTP/WS 路径透传设置与 tracker（与 slots 同款每请求接线） |
+| 8 | 观测 | `/api/credentials/load` 增 `usage`（5h/7d 请求数与 token）+ `pressure`；前端负载页加列 |
+
+### 验收
+
+- 单测：重压 key 被绕开、全零回落、preferred 优先于压力档、关闭时行为与现状完全一致；
+- 线上：开启后 watch 5h 份额标准差收窄；缓存率不受影响（新分派本就冷）。
