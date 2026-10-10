@@ -106,3 +106,58 @@ func TestHandlerQueueTimeoutReturns429(t *testing.T) {
 		t.Fatal("request beyond group budget must not reach upstream")
 	}
 }
+
+// Q2 严格语义: 选中凭证已达预算, 但另一凭证还在 cap → 不排队,
+// 预算档重选到在途最小的凭证并重建 Selection 立即服务。
+func TestHandlerBudgetTierRequeuesOnlyWhenAllKeysAtBudget(t *testing.T) {
+	forwarder := &scriptedForwarder{results: successfulAffinityResults(1)}
+	handler, manager, _ := newHandlerForTest(t, forwarder, "sk-one", "sk-two")
+
+	snapshot := manager.Current()
+	snapshot.Settings.CredentialConcurrencyLimit = 1
+	snapshot.Settings.CredentialQueueTimeout = 5 * time.Second
+	handler.credentialSlots.Configure(1)
+	// 凭证 1 填满到预算(3), 凭证 2 只在 cap(1): 公平序会选 1, 但 2 有预算内空位。
+	for i := 0; i < 3; i++ {
+		handler.credentialSlots.TryAcquireWithin(1, 3)
+	}
+	handler.credentialSlots.TryAcquire(2)
+
+	engine := newAffinityTestEngine(t, handler)
+	started := time.Now()
+	serveAffinityRequest(t, engine, `{"model":"gpt-4o","messages":[{"role":"user","content":"budget tier"}]}`)
+	if time.Since(started) > 2*time.Second {
+		t.Fatalf("served in %v, want immediate (no queue while budget room exists)", time.Since(started))
+	}
+	assertAffinityAttemptKeys(t, forwarder.inputs, []string{"sk-two"})
+}
+
+// Q1: 全部凭证达预算时排队; 其他 key 释放后唤醒并重选到该 key, 不等原选择。
+func TestHandlerQueueWakesOnOtherKeyReleaseAndRepicks(t *testing.T) {
+	forwarder := &scriptedForwarder{results: successfulAffinityResults(1)}
+	handler, manager, _ := newHandlerForTest(t, forwarder, "sk-one", "sk-two")
+
+	snapshot := manager.Current()
+	snapshot.Settings.CredentialConcurrencyLimit = 1
+	snapshot.Settings.CredentialQueueTimeout = 5 * time.Second
+	handler.credentialSlots.Configure(1)
+	for i := 0; i < 3; i++ {
+		handler.credentialSlots.TryAcquireWithin(1, 3)
+		handler.credentialSlots.TryAcquireWithin(2, 3)
+	}
+
+	engine := newAffinityTestEngine(t, handler)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// 等待者登记后释放凭证 2 的一个预算槽, 排队请求应唤醒并落到 sk-two。
+		deadline := time.Now().Add(2 * time.Second)
+		for handler.credentialSlots.Waiting(2) == 0 && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		handler.credentialSlots.Release(2)
+	}()
+	serveAffinityRequest(t, engine, `{"model":"gpt-4o","messages":[{"role":"user","content":"queued repick"}]}`)
+	<-done
+	assertAffinityAttemptKeys(t, forwarder.inputs, []string{"sk-two"})
+}

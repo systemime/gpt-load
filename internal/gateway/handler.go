@@ -733,6 +733,7 @@ func (handler *Handler) Handle(ginContext *gin.Context) {
 		ginContext,
 		snapshot,
 		iterator,
+		query,
 		retryAttemptLimit(snapshot.Settings.RetryCount),
 		allowedCredentialRefs,
 		selectedDialect,
@@ -906,6 +907,7 @@ func (handler *Handler) executeAttempts(
 	ginContext *gin.Context,
 	snapshot *state.ConfigSnapshot,
 	iterator *scheduler.Iterator,
+	schedulingQuery scheduler.Query,
 	forwardAttemptLimit int,
 	allowedCredentialRefs map[uint]state.CredentialRef,
 	selectedDialect dialect.Dialect,
@@ -1149,6 +1151,23 @@ func (handler *Handler) executeAttempts(
 			}
 			ref = candidateRef
 		}
+		// 每凭证在途准入(候选准备前, 保证重选后的 selection/ref 贯穿解密与转发):
+		// 响应续接不设限; 满 cap 且有其他候选时换候选; 全池达 cap 走预算档
+		// 每次评估重选(阶段 2), 重选后重建 Selection; 超深/超时 429。
+		if originalMetadata.PreviousResponseID == "" &&
+			!handler.credentialSlots.TryAcquire(selection.CredentialID) {
+			if !iterator.SelectionBeyondCap() {
+				continue
+			}
+			var admitted bool
+			selection, ref, admitted = handler.admitBeyondCap(
+				ginContext, recorder, snapshot, allowedCredentialRefs, schedulingQuery,
+				requestAffinity.preferredCredentialID, selection,
+			)
+			if !admitted {
+				return
+			}
+		}
 		encrypted, active := handler.registry.ActiveEncryptedCredentialDataIfMatch(ref)
 		if !active {
 			continue
@@ -1290,19 +1309,9 @@ func (handler *Handler) executeAttempts(
 				return
 			}
 		}
-		// 每凭证在途准入: 响应续接(单凭证硬绑定)不设限, 其余请求满 cap 时换候选;
-		// 全池达 cap 的豁免候选走组预算排队(阶段 2), 超深/超时 429。
+		// 每凭证在途准入: 响应续接(单凭证硬绑定)不设限。
+		// 已在候选准备前完成 TryAcquire/预算档重选, 此处只登记释放。
 		releaseAttempt := releaseGroup
-		if originalMetadata.PreviousResponseID == "" &&
-			!handler.credentialSlots.TryAcquire(selection.CredentialID) {
-			if !iterator.SelectionBeyondCap() {
-				releaseGroup()
-				continue
-			}
-			if !handler.admitBeyondCap(ginContext, recorder, snapshot, allowedCredentialRefs, selection) {
-				return
-			}
-		}
 		if originalMetadata.PreviousResponseID == "" {
 			acquiredCredential := selection.CredentialID
 			releaseAttempt = func() {

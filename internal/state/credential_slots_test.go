@@ -152,3 +152,51 @@ func TestCredentialSlotsAcquireWithinWaitHonorsDone(t *testing.T) {
 		t.Fatal("wait should abort when done closes")
 	}
 }
+
+func TestCredentialSlotsAcquireAnyWithinWakesOnOtherKeyRelease(t *testing.T) {
+	slots := NewCredentialSlots(1)
+	// 预算 3: 两个凭证都填满到预算。
+	for i := 0; i < 3; i++ {
+		slots.TryAcquireWithin(11, 3)
+		slots.TryAcquireWithin(12, 3)
+	}
+	acquired := make(chan uint, 1)
+	go func() {
+		id, ok := slots.AcquireAnyWithin([]uint{11, 12}, 0, 3, 5*time.Second, nil)
+		if !ok {
+			acquired <- 0
+			return
+		}
+		acquired <- id
+	}()
+	deadline := time.Now().Add(time.Second)
+	for slots.Waiting(11) == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	slots.Release(12) // 另一个 key 释放, 等待者应被唤醒并选中 12。
+	select {
+	case id := <-acquired:
+		if id != 12 {
+			t.Fatalf("acquired = %d, want 12 (freed key)", id)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("waiter not woken by other-key release")
+	}
+}
+
+func TestCredentialSlotsAcquireAnyWithinPrefersPreferredWhenFree(t *testing.T) {
+	slots := NewCredentialSlots(4)
+	slots.TryAcquire(11) // 11 在途 1, 12 在途 0
+	id, ok := slots.AcquireAnyWithin([]uint{12, 11}, 11, 3, time.Second, nil)
+	if !ok || id != 11 {
+		t.Fatalf("acquired = (%d, %v), want preferred 11", id, ok)
+	}
+	// preferred 满预算时退到其余候选中在途最小者。
+	for i := 0; i < 3; i++ {
+		slots.TryAcquireWithin(11, 3)
+	}
+	id, ok = slots.AcquireAnyWithin([]uint{11, 12}, 11, 3, time.Second, nil)
+	if !ok || id != 12 {
+		t.Fatalf("fallback acquired = (%d, %v), want 12", id, ok)
+	}
+}

@@ -1,6 +1,7 @@
 package state
 
 import (
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -10,11 +11,12 @@ import (
 // cap 来源于 credential_concurrency_limit 运行时设置; 0 表示不限制。
 // 计数器而非信号量: cap 变更只改阈值, 在途请求自然排空, 无重建与释放配对问题。
 type CredentialSlots struct {
-	capacity atomic.Int64 // <=0 表示不限制
-	mu       sync.RWMutex
-	counters map[uint]*atomic.Int64
-	waiting  map[uint]*atomic.Int64
-	notify   chan struct{} // Release 时关闭并换新, 等待者借此唤醒
+	capacity    atomic.Int64 // <=0 表示不限制
+	mu          sync.RWMutex
+	counters    map[uint]*atomic.Int64
+	waiting     map[uint]*atomic.Int64
+	notify      chan struct{} // Release 时关闭并换新, 等待者借此唤醒
+	lastAnyPick uint          // tryAcquireAnyWithin 最近选中并已占位的凭证
 }
 
 func NewCredentialSlots(capacity int) *CredentialSlots {
@@ -146,6 +148,73 @@ func (slots *CredentialSlots) AcquireWithinWait(
 			return false
 		}
 	}
+}
+
+// AcquireAnyWithin 在候选集内任一凭证在途降到 limit 之下时占位并返回该凭证,
+// 直到超时或 done 关闭。每次唤醒都重新评估全部候选(优先 preferred, 其次在途最小),
+// 不锁定入队时刻的选择。等待者计数登记在全部候选上, 深度守卫按单凭证最大等待数计。
+func (slots *CredentialSlots) AcquireAnyWithin(
+	ids []uint,
+	preferred uint,
+	limit int64,
+	timeout time.Duration,
+	done <-chan struct{},
+) (uint, bool) {
+	if slots == nil || len(ids) == 0 {
+		return 0, false
+	}
+	if id, ok := slots.tryAcquireAnyWithin(ids, preferred, limit); ok {
+		return id, true
+	}
+	waiters := make([]*atomic.Int64, 0, len(ids))
+	for _, id := range ids {
+		waiters = append(waiters, slots.waiterCount(id))
+		waiters[len(waiters)-1].Add(1)
+	}
+	defer func() {
+		for _, waiter := range waiters {
+			waiter.Add(-1)
+		}
+	}()
+	deadline := time.After(timeout)
+	for {
+		if id, ok := slots.tryAcquireAnyWithin(ids, preferred, limit); ok {
+			return id, true
+		}
+		notify := slots.notifyChannel()
+		select {
+		case <-notify:
+		case <-deadline:
+			return 0, false
+		case <-done:
+			return 0, false
+		}
+	}
+}
+
+// tryAcquireAnyWithin 按优先序尝试候选: preferred 最先, 其余按在途升序。
+// 返回成功占位的凭证; 全部达 limit 时 ok=false。
+func (slots *CredentialSlots) tryAcquireAnyWithin(ids []uint, preferred uint, limit int64) (uint, bool) {
+	if preferred != 0 {
+		if slots.TryAcquireWithin(preferred, limit) {
+			return preferred, true
+		}
+	}
+	ordered := make([]uint, 0, len(ids))
+	for _, id := range ids {
+		if id != 0 && id != preferred {
+			ordered = append(ordered, id)
+		}
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		return slots.Inflight(ordered[i]) < slots.Inflight(ordered[j])
+	})
+	for _, id := range ordered {
+		if slots.TryAcquireWithin(id, limit) {
+			return id, true
+		}
+	}
+	return 0, false
 }
 
 // Waiting 返回该凭证当前排队等待准入的请求数。
