@@ -96,6 +96,20 @@ export const controlQueryKeys = {
   },
   health: () => ['control', 'health'] as const,
   credentialLoad: () => ['control', 'credential-load'] as const,
+  usageOverview: (filters: {
+    from_ms?: number
+    to_ms?: number
+    group_id?: number
+    access_key_id?: number
+  }) =>
+    [
+      'control',
+      'usage-overview',
+      filters.from_ms ?? 0,
+      filters.to_ms ?? 0,
+      filters.group_id ?? 0,
+      filters.access_key_id ?? 0,
+    ] as const,
   logs: {
     all: ['control', 'logs'] as const,
     list: (filters: RequestLogFilters) =>

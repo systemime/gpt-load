@@ -40,6 +40,7 @@ const InspectorTab = lazySurface(() => import('./InspectorTab.vue'))
 const LogsTab = lazySurface(() => import('./LogsTab.vue'))
 const UsageTab = lazySurface(() => import('./UsageTab.vue'))
 const CredentialLoadTab = lazySurface(() => import('./CredentialLoadTab.vue'))
+const UsageOverviewTab = lazySurface(() => import('./UsageOverviewTab.vue'))
 
 const route = useRoute()
 const session = useAuthSession()
@@ -87,6 +88,7 @@ const items = computed<AppTabItem[]>(() => {
         { value: 'health', label: t('monitor.tabs.health') },
         ...shared,
         { value: 'credentials', label: t('monitor.tabs.credentials') },
+        { value: 'usageOverview', label: t('monitor.tabs.usageOverview') },
         { value: 'inspector', label: t('monitor.tabs.inspector') },
       ]
 })
@@ -411,6 +413,9 @@ function applyTimeRange(from: number, to: number, preset?: DateTimePreset): void
           </div>
           <div v-else-if="activeTab === 'credentials'" class="monitor-panel">
             <CredentialLoadTab />
+          </div>
+          <div v-else-if="activeTab === 'usageOverview'" class="monitor-panel">
+            <UsageOverviewTab />
           </div>
           <div v-else class="monitor-panel">
             <InspectorTab />
