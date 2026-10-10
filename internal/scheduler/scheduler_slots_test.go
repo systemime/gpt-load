@@ -112,3 +112,90 @@ func TestIteratorUnlimitedSlotsAdmitEverything(t *testing.T) {
 		t.Fatalf("Next() under unlimited cap = (%#v, %v), want key 11", selection, err)
 	}
 }
+
+type staticUsageView map[uint]state.CredentialUsage
+
+func (view staticUsageView) Usage(id uint) state.CredentialUsage {
+	return view[id]
+}
+
+func TestIteratorUsageBalancePrefersLessConsumedCredential(t *testing.T) {
+	source := fakeCredentialSource{keys: []state.CredentialMeta{
+		{ID: 11, GroupID: 1}, {ID: 12, GroupID: 1},
+	}}
+	usage := staticUsageView{11: {Requests5h: 900}, 12: {Requests5h: 100}}
+	query := slotTestQuery(nil)
+	query.CredentialUsage = usage
+	query.UsageBalance = true
+	iterator := New(schedulerSnapshot(), source, query)
+	selection, err := iterator.Next()
+	if err != nil || selection.CredentialID != 12 {
+		t.Fatalf("Next() = (%#v, %v), want less-consumed key 12", selection, err)
+	}
+}
+
+func TestIteratorUsageBalanceRespectsPreferredAffinity(t *testing.T) {
+	source := fakeCredentialSource{keys: []state.CredentialMeta{
+		{ID: 11, GroupID: 1}, {ID: 12, GroupID: 1},
+	}}
+	usage := staticUsageView{11: {Requests5h: 900}, 12: {Requests5h: 100}}
+	query := slotTestQuery(nil)
+	query.CredentialUsage = usage
+	query.UsageBalance = true
+	query.PreferredCredentialID = 11
+	iterator := New(schedulerSnapshot(), source, query)
+	selection, err := iterator.Next()
+	if err != nil || selection.CredentialID != 11 {
+		t.Fatalf("Next() = (%#v, %v), want preferred key 11 to win over usage pressure", selection, err)
+	}
+}
+
+func TestIteratorUsageBalanceFallsBackWhenNoUsage(t *testing.T) {
+	source := fakeCredentialSource{keys: []state.CredentialMeta{
+		{ID: 11, GroupID: 1}, {ID: 12, GroupID: 1},
+	}}
+	query := slotTestQuery(nil)
+	query.CredentialUsage = staticUsageView{}
+	query.UsageBalance = true
+	iterator := New(schedulerSnapshot(), source, query)
+	selection, err := iterator.Next()
+	if err != nil || selection.CredentialID != 11 {
+		t.Fatalf("Next() = (%#v, %v), want fair-order key 11 with zero usage", selection, err)
+	}
+}
+
+func TestIteratorUsageBalanceDisabledKeepsFairOrder(t *testing.T) {
+	source := fakeCredentialSource{keys: []state.CredentialMeta{
+		{ID: 11, GroupID: 1}, {ID: 12, GroupID: 1},
+	}}
+	usage := staticUsageView{11: {Requests5h: 900}, 12: {Requests5h: 100}}
+	query := slotTestQuery(nil)
+	query.CredentialUsage = usage
+	query.UsageBalance = false
+	iterator := New(schedulerSnapshot(), source, query)
+	selection, err := iterator.Next()
+	if err != nil || selection.CredentialID != 11 {
+		t.Fatalf("Next() = (%#v, %v), want fair-order key 11 when balance disabled", selection, err)
+	}
+}
+
+func TestIteratorUsageBalanceWeightsSetTargetShare(t *testing.T) {
+	source := fakeCredentialSource{keys: []state.CredentialMeta{
+		{ID: 11, GroupID: 1, WeightManual: modelWeightPointer(1)},
+		{ID: 12, GroupID: 1, WeightManual: modelWeightPointer(4)},
+	}}
+	// 11 权重 1/5=20%, 12 权重 4/5=80%: 12 用 300(实际60%) 仍低于目标 → 压力更低。
+	usage := staticUsageView{11: {Requests5h: 200}, 12: {Requests5h: 300}}
+	query := slotTestQuery(nil)
+	query.CredentialUsage = usage
+	query.UsageBalance = true
+	iterator := New(schedulerSnapshot(), source, query)
+	selection, err := iterator.Next()
+	if err != nil || selection.CredentialID != 12 {
+		t.Fatalf("Next() = (%#v, %v), want heavier-weight key 12 with lower pressure", selection, err)
+	}
+}
+
+func modelWeightPointer(value int) *int {
+	return &value
+}

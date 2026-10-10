@@ -124,6 +124,8 @@ export function setSettingsOverride(
       next.values.empty_response_retry = base.values.empty_response_retry
     } else if (key === 'credential_queue_enabled') {
       next.values.credential_queue_enabled = base.values.credential_queue_enabled
+    } else if (key === 'credential_usage_balance_enabled') {
+      next.values.credential_usage_balance_enabled = base.values.credential_usage_balance_enabled
     } else if (key === 'models_dev_auto_sync_enabled') {
       next.values.models_dev_auto_sync_enabled = base.values.models_dev_auto_sync_enabled
     } else if (key === 'cors') {

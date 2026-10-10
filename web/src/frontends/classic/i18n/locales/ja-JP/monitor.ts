@@ -41,6 +41,7 @@ export default {
         successRate: '成功率',
         affinity: 'アフィニティ',
         tokens: 'トークン',
+        pressure: '圧力',
         cacheRead: 'キャッシュ読取',
       },
       errors: {

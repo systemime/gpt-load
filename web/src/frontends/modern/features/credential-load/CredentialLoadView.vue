@@ -144,7 +144,7 @@ function formatTokens(value: number): string {
 
       <div class="modern-credential-load__table" role="table">
         <div class="modern-credential-load__row modern-credential-load__row--head" role="row">
-          <span v-for="column in (['credential','status','inflight','requests','share','successRate','affinity','tokens','cacheRead'] as const)" :key="column" role="columnheader">
+          <span v-for="column in (['credential','status','inflight','requests','share','successRate','affinity','tokens','cacheRead','pressure'] as const)" :key="column" role="columnheader">
             {{ t(`credentialLoad.columns.${column}`) }}
           </span>
         </div>
@@ -172,6 +172,9 @@ function formatTokens(value: number): string {
             {{ formatTokens(stats.uncachedInputTokens + stats.outputTokens) }}
           </span>
           <span role="cell" class="modern-credential-load__num">{{ formatTokens(stats.cacheReadTokens) }}</span>
+          <span role="cell" class="modern-credential-load__num">
+            {{ item.pressure > 0 ? `${Math.round(item.pressure * 100)}%` : '—' }}
+          </span>
         </div>
         <p v-if="rows.length === 0" class="modern-credential-load__empty">
           {{ t('credentialLoad.empty') }}
@@ -235,7 +238,7 @@ function formatTokens(value: number): string {
 
 .modern-credential-load__row {
   display: grid;
-  grid-template-columns: minmax(96px, 1.2fr) 0.7fr 0.8fr 0.7fr 1.4fr 0.8fr 0.8fr 0.9fr 0.9fr;
+  grid-template-columns: minmax(96px, 1.2fr) 0.7fr 0.8fr 0.7fr 1.4fr 0.8fr 0.8fr 0.9fr 0.9fr 0.8fr;
   gap: 8px;
   align-items: center;
   padding: 8px 12px;

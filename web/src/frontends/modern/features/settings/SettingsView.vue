@@ -106,6 +106,7 @@ const sectionFields: Record<SectionID, readonly SettingKey[]> = {
     'credential_concurrency_limit',
     'credential_queue_enabled',
     'credential_queue_timeout',
+    'credential_usage_balance_enabled',
   ],
   connection: [
     'global_concurrency_limit',
@@ -505,6 +506,20 @@ onScopeDispose(() => {
                     v-model="draft.affinity_enabled"
                     :label="t('settingsForm.fields.affinity_enabled')"
                     :disabled="disabled('affinity_enabled')"
+                  />
+                </SettingItem>
+                <SettingItem
+                  v-if="matches('credential_usage_balance_enabled')"
+                  v-bind="settingItem('credential_usage_balance_enabled')"
+                  :description="t('settingsForm.hints.credential_usage_balance_enabled')"
+                  @reset="restore('credential_usage_balance_enabled')"
+                  @undo="undoRestore('credential_usage_balance_enabled')"
+                >
+                  <AppSwitch
+                    id="settings-credential_usage_balance_enabled"
+                    v-model="draft.credential_usage_balance_enabled"
+                    :label="t('settingsForm.fields.credential_usage_balance_enabled')"
+                    :disabled="disabled('credential_usage_balance_enabled')"
                   />
                 </SettingItem>
                 <SettingItem

@@ -150,6 +150,7 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
               'affinity',
               'tokens',
               'cacheRead',
+              'pressure',
             ]"
             :key="column"
             role="columnheader"
@@ -184,6 +185,9 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
             {{ formatTokens(stats.uncached_input_tokens + stats.output_tokens) }}
           </span>
           <span role="cell" class="credential-load__number">{{ formatTokens(stats.cache_read_tokens) }}</span>
+          <span role="cell" class="credential-load__number">
+            {{ item.pressure > 0 ? `${Math.round(item.pressure * 100)}%` : '—' }}
+          </span>
         </div>
         <p v-if="rows.length === 0" class="credential-load__empty">
           {{ t('monitor.credentials.empty') }}
@@ -255,7 +259,7 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
 
 .credential-load__row {
   display: grid;
-  grid-template-columns: minmax(96px, 1.2fr) 0.7fr 0.8fr 0.7fr 1.4fr 0.8fr 0.8fr 0.9fr 0.9fr;
+  grid-template-columns: minmax(96px, 1.2fr) 0.7fr 0.8fr 0.7fr 1.4fr 0.8fr 0.8fr 0.9fr 0.9fr 0.8fr;
   gap: var(--space-2);
   align-items: center;
   padding: var(--space-2) var(--space-3);

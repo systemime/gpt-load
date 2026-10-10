@@ -41,6 +41,7 @@ export default {
         successRate: 'Success',
         affinity: 'Affinity',
         tokens: 'Tokens',
+        pressure: 'Pressure',
         cacheRead: 'Cache read',
       },
       errors: {

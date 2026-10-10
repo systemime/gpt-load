@@ -3,6 +3,8 @@ package control
 import (
 	"github.com/gin-gonic/gin"
 
+	"gpt-load/internal/state"
+
 	"gpt-load/internal/platform/response"
 )
 
@@ -34,8 +36,17 @@ type credentialLoadItem struct {
 	Status   string                               `json:"status"`
 	Inflight int64                                `json:"inflight"`
 	Queued   int64                                `json:"queued"`
+	Usage    credentialLoadUsage                  `json:"usage"`
+	Pressure float64                              `json:"pressure"`
 	Windows  map[string]credentialLoadWindowStats `json:"windows"`
 	Errors5h credentialLoadErrorStats             `json:"errors_5h"`
+}
+
+type credentialLoadUsage struct {
+	Requests5h int64 `json:"requests_5h"`
+	Tokens5h   int64 `json:"tokens_5h"`
+	Requests7d int64 `json:"requests_7d"`
+	Tokens7d   int64 `json:"tokens_7d"`
 }
 
 type credentialLoadResponse struct {
@@ -106,17 +117,27 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 		capacity = snapshot.Settings.CredentialConcurrencyLimit
 	}
 
+	views := service.registry.Snapshot()
+	pressures := credentialPressures(views, service.registry.UsageTracker().SnapshotAll())
+
 	result := credentialLoadResponse{
 		ObservedAtMS: observedAt,
 		Cap:          capacity,
-		Credentials:  make([]credentialLoadItem, 0, len(names)),
+		Credentials:  make([]credentialLoadItem, 0, len(views)),
 		LocalRejects: localRejects,
 	}
-	for _, view := range service.registry.Snapshot() {
+	usageSnapshot := service.registry.UsageTracker().SnapshotAll()
+	for _, view := range views {
+		usage := usageSnapshot[view.ID]
 		item := credentialLoadItem{
 			ID: view.ID, Name: names[view.ID], Status: string(view.Status),
 			Inflight: slots.Inflight(view.ID),
 			Queued:   slots.Waiting(view.ID),
+			Usage: credentialLoadUsage{
+				Requests5h: usage.Requests5h, Tokens5h: usage.Tokens5h,
+				Requests7d: usage.Requests7d, Tokens7d: usage.Tokens7d,
+			},
+			Pressure: pressures[view.ID],
 			Windows:  windows[view.ID],
 			Errors5h: errorCounts[view.ID],
 		}
@@ -124,6 +145,52 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	response.SuccessI18n(c, "common.success", result)
+}
+
+// credentialPressures 与调度器同式: 压力 = max(窗口×指标的实际份额/权重目标份额),
+// 全零用量时全部为 0。仅展示用, 调度真值在 scheduler.usagePressures。
+func credentialPressures(views []state.CredentialRuntimeView, usage map[uint]state.CredentialUsage) map[uint]float64 {
+	pressures := make(map[uint]float64, len(views))
+	weights := make(map[uint]float64, len(views))
+	var totalWeight, requests5h, tokens5h, requests7d, tokens7d float64
+	for _, view := range views {
+		weight := 50.0
+		if view.WeightManual != nil && *view.WeightManual > 0 {
+			weight = float64(*view.WeightManual)
+		}
+		weights[view.ID] = weight
+		totalWeight += weight
+		entry := usage[view.ID]
+		requests5h += float64(entry.Requests5h)
+		tokens5h += float64(entry.Tokens5h)
+		requests7d += float64(entry.Requests7d)
+		tokens7d += float64(entry.Tokens7d)
+	}
+	if totalWeight <= 0 || (requests5h <= 0 && tokens5h <= 0 && requests7d <= 0 && tokens7d <= 0) {
+		return pressures
+	}
+	share := func(part, total, target float64) float64 {
+		if total <= 0 || target <= 0 {
+			return 0
+		}
+		return (part / total) / target
+	}
+	for _, view := range views {
+		entry := usage[view.ID]
+		target := weights[view.ID] / totalWeight
+		value := share(float64(entry.Requests5h), requests5h, target)
+		if next := share(float64(entry.Tokens5h), tokens5h, target); next > value {
+			value = next
+		}
+		if next := share(float64(entry.Requests7d), requests7d, target); next > value {
+			value = next
+		}
+		if next := share(float64(entry.Tokens7d), tokens7d, target); next > value {
+			value = next
+		}
+		pressures[view.ID] = value
+	}
+	return pressures
 }
 
 func (service *Service) credentialNames(c *gin.Context) (map[uint]string, error) {

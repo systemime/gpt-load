@@ -83,6 +83,7 @@ type runtimeCredentialRegistry interface {
 	CaptureActiveCredentialRefs(groupIDs []uint) []state.CredentialRef
 	CredentialRef(credentialID uint) (state.CredentialRef, bool)
 	ActiveEncryptedCredentialDataIfMatch(ref state.CredentialRef) (string, bool)
+	UsageTracker() *state.CredentialUsageTracker
 	SetCooldownWithChange(credentialID uint, until time.Time) (exists bool, changed bool)
 	SetCooldownWithChangeIfVersion(credentialID uint, expectedVersion uint64, until time.Time) (matched bool, changed bool)
 	SetModelCooldown(state.CredentialRef, string, time.Time, time.Time) (bool, bool)
@@ -725,6 +726,8 @@ func (handler *Handler) Handle(ginContext *gin.Context) {
 	}
 	handler.configureCredentialSlots(snapshot)
 	query.CredentialSlots = handler.credentialSlots
+	query.CredentialUsage = handler.registry.UsageTracker()
+	query.UsageBalance = snapshot.Settings.CredentialUsageBalance
 	iterator := scheduler.New(snapshot, handler.registry, query)
 	handler.executeAttempts(
 		ginContext,

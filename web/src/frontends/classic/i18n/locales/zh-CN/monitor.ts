@@ -41,6 +41,7 @@ export default {
         successRate: '成功率',
         affinity: '亲和命中',
         tokens: '消耗 tok',
+        pressure: '压力',
         cacheRead: '缓存读',
       },
       errors: {

@@ -123,6 +123,18 @@ function setQueueEnabled(value: boolean): void {
   publish('credential_queue_enabled', draft)
 }
 
+const usageBalanceValue = computed(() =>
+  props.base.settings.values.credential_usage_balance_enabled
+    ? t('settings.runtime.enabled')
+    : t('settings.runtime.disabled'),
+)
+
+function setUsageBalance(value: boolean): void {
+  const draft = cloneDraft()
+  draft.values.credential_usage_balance_enabled = value
+  publish('credential_usage_balance_enabled', draft)
+}
+
 function setNumber(key: (typeof numericKeys)[number], value: string): void {
   const draft = cloneDraft()
   draft.values[key] = value.trim() === '' ? Number.NaN : Number(value)
@@ -228,6 +240,31 @@ function numberFieldValue(key: (typeof numericKeys)[number]): string {
             :disabled="disabled"
             :label="t('settings.affinity.credential_queue_enabled')"
             @update:model-value="setQueueEnabled"
+          />
+        </template>
+      </SettingRow>
+
+      <SettingRow
+        :label="t('settings.affinity.credential_usage_balance_enabled')"
+        :value="
+          isPendingRestore('credential_usage_balance_enabled')
+            ? t('settings.runtime.resetPending')
+            : usageBalanceValue
+        "
+        :help="t('settings.affinity.credential_usage_balance_enabledHelp')"
+        :source-label="sourceLabel('credential_usage_balance_enabled')"
+        :action-label="actionLabel('credential_usage_balance_enabled')"
+        :overridden="hasOverride('credential_usage_balance_enabled')"
+        :pending-restore="isPendingRestore('credential_usage_balance_enabled')"
+        :disabled="disabled"
+        @toggle="toggleOverride('credential_usage_balance_enabled')"
+      >
+        <template #control>
+          <AppSwitch
+            :model-value="draft.values.credential_usage_balance_enabled"
+            :disabled="disabled"
+            :label="t('settings.affinity.credential_usage_balance_enabled')"
+            @update:model-value="setUsageBalance"
           />
         </template>
       </SettingRow>

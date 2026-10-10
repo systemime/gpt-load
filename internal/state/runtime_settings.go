@@ -37,6 +37,7 @@ const (
 	SettingCredentialConcurrencyLimit       = "credential_concurrency_limit"
 	SettingCredentialQueueEnabled           = "credential_queue_enabled"
 	SettingCredentialQueueTimeout           = "credential_queue_timeout"
+	SettingCredentialUsageBalance           = "credential_usage_balance_enabled"
 	SettingValidationInterval               = "validation_interval"
 	SettingRequestLogRetentionDays          = "request_log_retention_days"
 	SettingModelsDevAutoSyncEnabled         = "models_dev_auto_sync_enabled"
@@ -97,6 +98,7 @@ type RuntimeSettings struct {
 	CredentialConcurrencyLimit       int
 	CredentialQueueEnabled           bool
 	CredentialQueueTimeout           time.Duration
+	CredentialUsageBalance           bool
 	ValidationInterval               time.Duration
 	RequestLogRetentionDays          int
 	ModelsDevAutoSyncEnabled         bool
@@ -134,6 +136,7 @@ func DefaultRuntimeSettings() RuntimeSettings {
 		CredentialConcurrencyLimit: defaultCredentialConcurrencyLimit,
 		CredentialQueueEnabled:     true,
 		CredentialQueueTimeout:     time.Duration(defaultCredentialQueueTimeout) * time.Second,
+		CredentialUsageBalance:     false,
 		ValidationInterval:         10 * time.Minute,
 		RequestLogRetentionDays:    defaultRequestLogRetentionDays,
 		ModelsDevAutoSyncEnabled:   true,
@@ -161,6 +164,7 @@ func IsRuntimeSettingKey(key string) bool {
 		SettingCredentialConcurrencyLimit,
 		SettingCredentialQueueEnabled,
 		SettingCredentialQueueTimeout,
+		SettingCredentialUsageBalance,
 		SettingValidationInterval,
 		SettingRequestLogRetentionDays,
 		SettingModelsDevAutoSyncEnabled:
@@ -295,6 +299,12 @@ func ResolveRuntimeSettings(settings config.Settings) (RuntimeSettings, error) {
 				return RuntimeSettings{}, err
 			}
 			resolved.CredentialQueueTimeout = time.Duration(seconds) * time.Second
+		case SettingCredentialUsageBalance:
+			value, err := strictBoolean(key, value)
+			if err != nil {
+				return RuntimeSettings{}, err
+			}
+			resolved.CredentialUsageBalance = value
 		case SettingValidationInterval:
 			seconds, err := positiveWholeSeconds(key, value)
 			if err != nil {
@@ -464,6 +474,9 @@ func ValidateRuntimeSetting(key string, value any) error {
 		return err
 	case SettingCredentialQueueTimeout:
 		_, err := wholeNumberInRange(key, value, minCredentialQueueTimeout, maxCredentialQueueTimeout)
+		return err
+	case SettingCredentialUsageBalance:
+		_, err := strictBoolean(key, value)
 		return err
 	case SettingRequestLogRetentionDays:
 		_, err := wholeNumberInRange(

@@ -69,6 +69,7 @@ type SettingsValuesResponse struct {
 	AffinityCapacity                 int                   `json:"affinity_capacity"`
 	CredentialConcurrencyLimit       int                   `json:"credential_concurrency_limit"`
 	CredentialQueueEnabled           bool                  `json:"credential_queue_enabled"`
+	CredentialUsageBalance           bool                  `json:"credential_usage_balance_enabled"`
 	CredentialQueueTimeout           int64                 `json:"credential_queue_timeout"`
 	ValidationInterval               int64                 `json:"validation_interval"`
 	RequestLogRetentionDays          int                   `json:"request_log_retention_days"`
@@ -486,6 +487,7 @@ func mapSettingsResponse(
 			AffinityCapacity:                 settings.AffinityCapacity,
 			CredentialConcurrencyLimit:       settings.CredentialConcurrencyLimit,
 			CredentialQueueEnabled:           settings.CredentialQueueEnabled,
+			CredentialUsageBalance:           settings.CredentialUsageBalance,
 			CredentialQueueTimeout:           durationSeconds(settings.CredentialQueueTimeout),
 			ValidationInterval:               durationSeconds(settings.ValidationInterval),
 			RequestLogRetentionDays:          settings.RequestLogRetentionDays,

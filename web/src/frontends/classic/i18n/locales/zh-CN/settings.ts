@@ -134,6 +134,8 @@ export default {
       credential_queue_timeoutHelp: '排队请求的最长等待时长，超时返回 429 并附带 Retry-After。',
       credential_queue_timeoutEffective: '{value} 秒',
       credential_queue_timeoutError: '请输入 1 到 600 之间的整数。',
+      credential_usage_balance_enabled: '用量均衡',
+      credential_usage_balance_enabledHelp: '开启后新分派优先给 5h/7d 窗口内用量份额低的凭证（压力=实际份额/权重份额，双窗口双指标取最大）；已建立的亲和不受影响，缓存率不变。默认关闭。',
       entries: '条',
       requests: '个并发',
     },

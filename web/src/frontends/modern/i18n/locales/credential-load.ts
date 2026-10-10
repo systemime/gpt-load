@@ -19,6 +19,7 @@ export const zhCN = {
     affinity: '亲和命中',
     tokens: '消耗 tok',
     cacheRead: '缓存读',
+    pressure: '压力',
   },
   errors: {
     rateLimited: '限流',
@@ -52,6 +53,7 @@ export const enUS = {
     affinity: 'Affinity',
     tokens: 'Tokens',
     cacheRead: 'Cache read',
+    pressure: 'Pressure',
   },
   errors: {
     rateLimited: 'Rate limited',
@@ -85,6 +87,7 @@ export const jaJP = {
     affinity: 'アフィニティ',
     tokens: 'トークン',
     cacheRead: 'キャッシュ読取',
+    pressure: '圧力',
   },
   errors: {
     rateLimited: 'レート制限',

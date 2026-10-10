@@ -28,12 +28,21 @@ export interface CredentialLoadErrors {
   other: number
 }
 
+export interface CredentialLoadUsage {
+  requests_5h: number
+  tokens_5h: number
+  requests_7d: number
+  tokens_7d: number
+}
+
 export interface CredentialLoadItem {
   id: number
   name: string
   status: string
   inflight: number
   queued: number
+  usage: CredentialLoadUsage
+  pressure: number
   windows: Record<CredentialLoadWindowKey, CredentialLoadWindow>
   errors_5h: CredentialLoadErrors
 }
@@ -62,7 +71,7 @@ const errorFields = [
   'scheduled',
   'other',
 ] as const
-const itemFields = ['id', 'name', 'status', 'inflight', 'queued', 'windows', 'errors_5h'] as const
+const itemFields = ['id', 'name', 'status', 'inflight', 'queued', 'usage', 'pressure', 'windows', 'errors_5h'] as const
 const reportFields = ['observed_at_ms', 'cap', 'credentials', 'local_rejects'] as const
 
 function invalidResponse(): never {
@@ -115,6 +124,19 @@ function projectItem(value: unknown): CredentialLoadItem {
     status: projectString(record.status),
     inflight: projectCount(record.inflight),
     queued: projectCount(record.queued),
+    usage: ((): CredentialLoadUsage => {
+      const usageRecord = projectRecord(record.usage)
+      return {
+        requests_5h: projectCount(usageRecord.requests_5h),
+        tokens_5h: projectCount(usageRecord.tokens_5h),
+        requests_7d: projectCount(usageRecord.requests_7d),
+        tokens_7d: projectCount(usageRecord.tokens_7d),
+      }
+    })(),
+    pressure:
+      typeof record.pressure === 'number' && Number.isFinite(record.pressure) && record.pressure >= 0
+        ? record.pressure
+        : 0,
     windows: mapped,
     errors_5h: projectErrors(record.errors_5h),
   }

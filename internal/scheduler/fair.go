@@ -78,8 +78,18 @@ func (iterator *Iterator) selectCredential(candidates []weightedCredential, pref
 			}
 			return a.ID < b.ID
 		}
+		pressure, pressureActive := iterator.usagePressures(eligible)
 		first := eligible[0]
 		for _, candidate := range eligible[1:] {
+			if pressureActive {
+				if pressure[candidate.meta.ID] < pressure[first.meta.ID] {
+					first = candidate
+					continue
+				}
+				if pressure[candidate.meta.ID] > pressure[first.meta.ID] {
+					continue
+				}
+			}
 			if less(candidate, first) {
 				first = candidate
 			}
@@ -124,4 +134,50 @@ func (iterator *Iterator) selectCredential(candidates []weightedCredential, pref
 		selected, found = first.meta, true
 	})
 	return selected, found
+}
+
+// usagePressures 计算候选集内每凭证的用量压力 = max(各窗口/各指标的实际份额/目标份额),
+// 目标份额取有效权重占比。任一维度有数据即激活; 全零返回 false 回落公平序。
+// preferred(亲和)优先级在其之上, 已钉住的会话不受用量均衡影响。
+func (iterator *Iterator) usagePressures(eligible []weightedCredential) (map[uint]float64, bool) {
+	if iterator.credentialUsage == nil || !iterator.usageBalance || len(eligible) < 2 {
+		return nil, false
+	}
+	usages := make(map[uint]state.CredentialUsage, len(eligible))
+	var totalWeight, requests5h, tokens5h, requests7d, tokens7d float64
+	for _, candidate := range eligible {
+		usage := iterator.credentialUsage.Usage(candidate.meta.ID)
+		usages[candidate.meta.ID] = usage
+		totalWeight += float64(candidate.weight)
+		requests5h += float64(usage.Requests5h)
+		tokens5h += float64(usage.Tokens5h)
+		requests7d += float64(usage.Requests7d)
+		tokens7d += float64(usage.Tokens7d)
+	}
+	if requests5h <= 0 && tokens5h <= 0 && requests7d <= 0 && tokens7d <= 0 {
+		return nil, false
+	}
+	share := func(part float64, total float64, target float64) float64 {
+		if total <= 0 || target <= 0 {
+			return 0
+		}
+		return (part / total) / target
+	}
+	pressure := make(map[uint]float64, len(eligible))
+	for _, candidate := range eligible {
+		usage := usages[candidate.meta.ID]
+		target := float64(candidate.weight) / totalWeight
+		value := share(float64(usage.Requests5h), requests5h, target)
+		if next := share(float64(usage.Tokens5h), tokens5h, target); next > value {
+			value = next
+		}
+		if next := share(float64(usage.Requests7d), requests7d, target); next > value {
+			value = next
+		}
+		if next := share(float64(usage.Tokens7d), tokens7d, target); next > value {
+			value = next
+		}
+		pressure[candidate.meta.ID] = value
+	}
+	return pressure, true
 }

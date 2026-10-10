@@ -37,6 +37,7 @@ export type SettingNumber = keyof typeof settingNumbers
 export const settingSwitches = [
   'affinity_enabled',
   'credential_queue_enabled',
+  'credential_usage_balance_enabled',
   'responses_websocket_enabled',
   'empty_response_retry',
   'models_dev_auto_sync_enabled',

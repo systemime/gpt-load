@@ -140,6 +140,8 @@ export default {
       credential_queue_timeoutHelp: 'キュー待ちの最長時間。超過すると Retry-After 付きの 429 を返します。',
       credential_queue_timeoutEffective: '{value} 秒',
       credential_queue_timeoutError: '1 から 600 までの整数を入力してください。',
+      credential_usage_balance_enabled: '使用量バランス',
+      credential_usage_balance_enabledHelp: '有効にすると、直近 5h/7d ウィンドウの使用シェアが低い認証情報を新規割り当てに優先します（圧力=実際のシェア/重みシェア、ウィンドウと指標の最大値）。既存のアフィニティは影響を受けず、キャッシュ率は変わりません。既定は無効。',
       entries: '件',
       requests: '同時',
     },

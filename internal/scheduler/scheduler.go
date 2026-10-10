@@ -20,6 +20,11 @@ type CredentialSource interface {
 	CollectCredentialCandidates(groupIDs []uint, excluded func(uint) bool, now time.Time) []state.CredentialMeta
 }
 
+// CredentialUsageView 暴露每凭证滚动窗口用量, 由注册表的 tracker 实现。
+type CredentialUsageView interface {
+	Usage(uint) state.CredentialUsage
+}
+
 type Query struct {
 	ClientProtocol           protocol.Protocol
 	Operation                execution.Operation
@@ -34,6 +39,12 @@ type Query struct {
 	// CredentialSlots 非 nil 时, 在途数达 cap 的凭证不进入候选;
 	// 全池达 cap 时豁免过滤(退化为在途最少者优先), 保证不比无 cap 更差。
 	CredentialSlots *state.CredentialSlots
+
+	// CredentialUsage 提供滚动窗口用量视图; UsageBalance 开启时,
+	// 新分派优先用量压力(实际份额/权重份额, 5h/7d×请求/token 取 max)最低的凭证。
+	// preferred(亲和)仍在其上, 已钉住会话不受影响。
+	CredentialUsage CredentialUsageView
+	UsageBalance    bool
 
 	// ResponsesWebsocket 非 nil 时按原生 WS 合同准入，不要求 HTTP 资源接口。
 	ResponsesWebsocket *execution.WebsocketCapabilities
@@ -80,6 +91,8 @@ type Iterator struct {
 	allowedCredentialIDs  map[uint]struct{}
 	preferredCredentialID uint
 	credentialSlots       *state.CredentialSlots
+	credentialUsage       CredentialUsageView
+	usageBalance          bool
 	beyondCap             bool
 	tried                 map[uint]struct{}
 	skippedGroups         map[uint]struct{}
@@ -147,6 +160,8 @@ func newWithClock(
 		allowedCredentialIDs:  cloneAllowedCredentialIDs(query),
 		preferredCredentialID: query.PreferredCredentialID,
 		credentialSlots:       query.CredentialSlots,
+		credentialUsage:       query.CredentialUsage,
+		usageBalance:          query.UsageBalance,
 		tried:                 make(map[uint]struct{}),
 		skippedGroups:         make(map[uint]struct{}),
 		now:                   now,

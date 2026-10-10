@@ -148,6 +148,8 @@ export default {
       credential_queue_timeoutHelp: 'Maximum wait for a queued request; exceeding it returns 429 with Retry-After.',
       credential_queue_timeoutEffective: '{value} seconds',
       credential_queue_timeoutError: 'Enter a whole number between 1 and 600.',
+      credential_usage_balance_enabled: 'Usage balance',
+      credential_usage_balance_enabledHelp: 'When enabled, new assignments prefer credentials with lower usage share over rolling 5h/7d windows (pressure = actual share / weight share, max across windows and metrics); existing affinity pins are untouched, so cache rate is unaffected. Off by default.',
       entries: 'entries',
       requests: 'concurrent',
     },

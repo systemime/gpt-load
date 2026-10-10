@@ -76,6 +76,7 @@ type CredentialRef struct {
 type CredentialRegistry struct {
 	scheduling       *SchedulingState
 	slots            *CredentialSlots
+	usageTracker     *CredentialUsageTracker
 	mu               sync.RWMutex
 	buckets          map[uint]map[uint]*CredentialEntry
 	credentialGroups map[uint]uint
@@ -85,9 +86,19 @@ func NewCredentialRegistry() *CredentialRegistry {
 	return &CredentialRegistry{
 		scheduling:       NewSchedulingState(),
 		slots:            NewCredentialSlots(0),
+		usageTracker:     NewCredentialUsageTracker(),
 		buckets:          make(map[uint]map[uint]*CredentialEntry),
 		credentialGroups: make(map[uint]uint),
 	}
+}
+
+// UsageTracker 返回与本注册表同生命周期的凭证用量快照表。
+// 控制面后台刷新, 网关调度读取, 负载端点展示。
+func (r *CredentialRegistry) UsageTracker() *CredentialUsageTracker {
+	if r == nil || r.usageTracker == nil {
+		return NewCredentialUsageTracker()
+	}
+	return r.usageTracker
 }
 
 // Slots 返回与本注册表同生命周期的每凭证在途准入计数器。

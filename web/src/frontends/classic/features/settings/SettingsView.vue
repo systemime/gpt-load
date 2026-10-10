@@ -345,7 +345,8 @@ function settingLabel(key: RuntimeSettingKey): string {
     key === 'affinity_capacity' ||
     key === 'credential_concurrency_limit' ||
     key === 'credential_queue_enabled' ||
-    key === 'credential_queue_timeout'
+    key === 'credential_queue_timeout' ||
+    key === 'credential_usage_balance_enabled'
   )
     return t(`settings.affinity.${key}`)
   if (key === 'request_log_retention_days') return t('settings.logs.retention')
@@ -375,7 +376,8 @@ function sectionForKey(key: RuntimeSettingKey): SettingsSection {
     key === 'affinity_capacity' ||
     key === 'credential_concurrency_limit' ||
     key === 'credential_queue_enabled' ||
-    key === 'credential_queue_timeout'
+    key === 'credential_queue_timeout' ||
+    key === 'credential_usage_balance_enabled'
   )
     return 'routing'
   if (

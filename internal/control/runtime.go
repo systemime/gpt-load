@@ -19,6 +19,7 @@ const (
 	defaultValidationInterval = 10 * time.Minute
 	maxValidationJitter       = 3 * time.Minute
 	retentionInterval         = time.Hour
+	credentialUsageInterval   = time.Minute
 )
 
 type credentialMutationCoordinator interface {
@@ -43,6 +44,12 @@ type credentialStageCleaner interface {
 	CleanupCredentialStages(context.Context, time.Time) error
 }
 
+// credentialUsageReader 由 requestlog.Service 实现: 聚合滚动窗口用量,
+// 供用量均衡(阶段 3)的后台刷新循环写入注册表 tracker。
+type credentialUsageReader interface {
+	CredentialWindowUsage(context.Context) (map[uint]state.CredentialUsage, error)
+}
+
 type runtimeTicker interface {
 	C() <-chan time.Time
 	Stop()
@@ -63,6 +70,7 @@ func (ticker standardRuntimeTicker) Stop() {
 type Runtime struct {
 	registry           *state.CredentialRegistry
 	validator          validationSweep
+	usageReader        credentialUsageReader
 	requestLogCleaner  RequestLogCleaner
 	stageCleaner       credentialStageCleaner
 	operationRecovery  operationRecoveryRuntime
@@ -105,6 +113,9 @@ func NewRuntime(
 	}
 	if operationRecovery != nil {
 		runtime.oauthCallback = operationRecovery.oauthCallback
+	}
+	if reader, ok := requestLogCleaner.(credentialUsageReader); ok {
+		runtime.usageReader = reader
 	}
 	runtime.validator = newValidationWorker(
 		manager,
@@ -160,7 +171,43 @@ func (runtime *Runtime) Run(ctx context.Context) {
 			runtime.oauthCallback.Run(ctx)
 		}()
 	}
+	if runtime.usageReader != nil {
+		usageTicker := runtime.newTicker(credentialUsageInterval)
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			runtime.runCredentialUsage(ctx, usageTicker)
+		}()
+	}
 	wait.Wait()
+}
+
+// runCredentialUsage 周期聚合滚动窗口用量并刷新注册表 tracker。
+// 失败只记日志不中断, 下一轮重试; tracker 保持上一份成功快照。
+func (runtime *Runtime) runCredentialUsage(ctx context.Context, ticker runtimeTicker) {
+	defer func() { ticker.Stop() }()
+	refresh := func() {
+		usage, err := runtime.usageReader.CredentialWindowUsage(ctx)
+		if err != nil {
+			if ctx.Err() == nil {
+				logrus.WithError(err).Warn("Refresh credential window usage failed")
+			}
+			return
+		}
+		runtime.registry.UsageTracker().Refresh(usage)
+	}
+	refresh()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C():
+			if ctx.Err() != nil {
+				return
+			}
+			refresh()
+		}
+	}
 }
 
 func (runtime *Runtime) runValidation(

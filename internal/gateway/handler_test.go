@@ -1954,6 +1954,10 @@ func (panicRuntimeRegistry) SchedulingState() *state.SchedulingState {
 	panic("unexpected registry access")
 }
 
+func (panicRuntimeRegistry) UsageTracker() *state.CredentialUsageTracker {
+	panic("unexpected registry access")
+}
+
 func (panicRuntimeRegistry) CollectCredentialCandidates([]uint, func(uint) bool, time.Time) []state.CredentialMeta {
 	panic("model endpoint collected upstream candidates")
 }

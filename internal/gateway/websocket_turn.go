@@ -322,6 +322,8 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 	if requiredRef == nil {
 		query.CredentialSlots = h.credentialSlots
 	}
+	query.CredentialUsage = h.registry.UsageTracker()
+	query.UsageBalance = snapshot.Settings.CredentialUsageBalance && requiredRef == nil
 	iterator := scheduler.New(snapshot, h.registry, query)
 	redactionCipher, err := h.encryption.NewRedactionCipher(key.ID)
 	if err != nil {

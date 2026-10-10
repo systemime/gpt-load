@@ -23,12 +23,21 @@ export interface CredentialLoadErrors {
   other: number
 }
 
+export interface CredentialLoadUsage {
+  requests5h: number
+  tokens5h: number
+  requests7d: number
+  tokens7d: number
+}
+
 export interface CredentialLoadItem {
   id: number
   name: string
   status: string
   inflight: number
   queued: number
+  usage: CredentialLoadUsage
+  pressure: number
   windows: Record<CredentialLoadWindowKey, CredentialLoadWindow>
   errors5h: CredentialLoadErrors
 }
@@ -74,6 +83,16 @@ function readItem(value: unknown): CredentialLoadItem {
     status: text(row.status),
     inflight: integer(row.inflight),
     queued: integer(row.queued),
+    usage: (() => {
+      const usageRow = record(row.usage)
+      return {
+        requests5h: integer(usageRow.requests_5h),
+        tokens5h: integer(usageRow.tokens_5h),
+        requests7d: integer(usageRow.requests_7d),
+        tokens7d: integer(usageRow.tokens_7d),
+      }
+    })(),
+    pressure: typeof row.pressure === 'number' && Number.isFinite(row.pressure) ? row.pressure : 0,
     windows: Object.fromEntries(
       credentialLoadWindowKeys.map((key) => [key, readWindow(windows[key])]),
     ) as Record<CredentialLoadWindowKey, CredentialLoadWindow>,
