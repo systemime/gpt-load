@@ -162,7 +162,7 @@ func TestCredentialSlotsAcquireAnyWithinWakesOnOtherKeyRelease(t *testing.T) {
 	}
 	acquired := make(chan uint, 1)
 	go func() {
-		id, ok := slots.AcquireAnyWithin([]uint{11, 12}, 0, 3, 5*time.Second, nil)
+		id, ok := slots.AcquireAnyWithin([]uint{11, 12}, 0, 5*time.Second, nil)
 		if !ok {
 			acquired <- 0
 			return
@@ -185,18 +185,46 @@ func TestCredentialSlotsAcquireAnyWithinWakesOnOtherKeyRelease(t *testing.T) {
 }
 
 func TestCredentialSlotsAcquireAnyWithinPrefersPreferredWhenFree(t *testing.T) {
-	slots := NewCredentialSlots(4)
-	slots.TryAcquire(11) // 11 在途 1, 12 在途 0
-	id, ok := slots.AcquireAnyWithin([]uint{12, 11}, 11, 3, time.Second, nil)
+	slots := NewCredentialSlots(1) // 预算 = 1+2 = 3
+	slots.TryAcquire(11)           // 11 在途 1, 12 在途 0
+	id, ok := slots.AcquireAnyWithin([]uint{12, 11}, 11, time.Second, nil)
 	if !ok || id != 11 {
 		t.Fatalf("acquired = (%d, %v), want preferred 11", id, ok)
 	}
-	// preferred 满预算时退到其余候选中在途最小者。
-	for i := 0; i < 3; i++ {
+	// preferred 满预算(3)时退到其余候选中在途最小者。
+	for i := 0; i < 2; i++ {
 		slots.TryAcquireWithin(11, 3)
 	}
-	id, ok = slots.AcquireAnyWithin([]uint{11, 12}, 11, 3, time.Second, nil)
+	id, ok = slots.AcquireAnyWithin([]uint{11, 12}, 11, time.Second, nil)
 	if !ok || id != 12 {
 		t.Fatalf("fallback acquired = (%d, %v), want 12", id, ok)
+	}
+}
+
+func TestCredentialSlotsPerCredentialLimitOverridesGlobal(t *testing.T) {
+	slots := NewCredentialSlots(4)
+	slots.SetLimits(map[uint]int64{11: 2})
+	if !slots.TryAcquire(11) || !slots.TryAcquire(11) {
+		t.Fatal("override cap 2 should admit two")
+	}
+	if slots.TryAcquire(11) {
+		t.Fatal("override cap 2 should reject the third")
+	}
+	if !slots.TryAcquire(12) || !slots.TryAcquire(12) || !slots.TryAcquire(12) || !slots.TryAcquire(12) {
+		t.Fatal("global cap 4 should still admit four for other ids")
+	}
+	if slots.Available(11) || slots.Available(12) {
+		t.Fatal("both ids are at their effective limits")
+	}
+	if !slots.Available(13) {
+		t.Fatal("untouched id should remain available under global cap")
+	}
+	if slots.EffectiveLimit(11) != 2 || slots.EffectiveLimit(12) != 4 {
+		t.Fatalf("effective limits = (%d, %d), want (2, 4)", slots.EffectiveLimit(11), slots.EffectiveLimit(12))
+	}
+	// 清除覆盖后回落全局。
+	slots.SetLimits(map[uint]int64{})
+	if !slots.TryAcquire(11) || !slots.TryAcquire(11) {
+		t.Fatal("cleared override should fall back to global cap 4")
 	}
 }

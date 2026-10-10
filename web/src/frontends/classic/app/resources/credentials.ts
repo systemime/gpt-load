@@ -73,6 +73,7 @@ export interface CredentialPatch {
   name?: string
   status?: CredentialConfiguredStatus
   weight_manual?: number | null
+  concurrency_limit?: number | null
   proxy?: ProxyMutation
 }
 
@@ -110,6 +111,8 @@ const credentialItemFields = [
   'configured_status',
   'effective_status',
   'weight',
+  'concurrency_limit',
+  'effective_concurrency_limit',
   'recent_success_count',
   'recent_failure_count',
   'consecutive_failure_count',
@@ -612,6 +615,14 @@ export function projectCredentialItem(value: unknown): CredentialItemDto {
     configured_status: configuredStatus,
     effective_status: effectiveStatus,
     weight,
+    concurrency_limit:
+      record.concurrency_limit === null || record.concurrency_limit === undefined
+        ? null
+        : projectSafeInteger(record.concurrency_limit, { minimum: 0, maximum: 64 }),
+    effective_concurrency_limit: projectSafeInteger(record.effective_concurrency_limit, {
+      minimum: 0,
+      maximum: 64,
+    }),
     recent_success_count: projectSafeInteger(record.recent_success_count, { minimum: 0 }),
     recent_failure_count: projectSafeInteger(record.recent_failure_count, { minimum: 0 }),
     consecutive_failure_count: projectSafeInteger(record.consecutive_failure_count, { minimum: 0 }),

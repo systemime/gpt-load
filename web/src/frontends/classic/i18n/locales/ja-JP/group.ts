@@ -441,6 +441,12 @@ export default {
       cardLabel: 'チャネル認証情報 {mask}',
       weightFor: '{mask} のウェイト',
       weight: '{weight}',
+      editCap: '同時実行上限を編集',
+      capInherit: 'グローバルに従う（現在 {cap}）',
+      capEditor: {
+        value: '同時実行上限',
+        invalid: '0～64 の整数を入力。空欄でグローバルに従います',
+      },
       editWeight: 'ウェイトを編集',
       weightEditor: {
         title: 'スケジューリングウェイト',
@@ -545,6 +551,7 @@ export default {
         credential: 'キー',
         status: 'ステータス',
         weight: 'ウェイト',
+                cap: '同時実行上限',
         recent: '直近 5 分',
         failure: '最近の失敗',
         recovery: '回復',

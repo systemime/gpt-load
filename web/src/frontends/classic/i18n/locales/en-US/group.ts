@@ -440,6 +440,12 @@ export default {
       cardLabel: 'Channel credential {mask}',
       weightFor: 'Weight for {mask}',
       weight: '{weight}',
+      editCap: 'Edit concurrency cap',
+      capInherit: 'Follow global (now {cap})',
+      capEditor: {
+        value: 'Concurrency cap',
+        invalid: 'Enter 0–64, leave empty to follow global',
+      },
       editWeight: 'Edit weight',
       weightEditor: {
         title: 'Scheduling weight',
@@ -543,6 +549,7 @@ export default {
         credential: 'Key',
         status: 'Status',
         weight: 'Weight',
+                cap: 'Concurrency cap',
         recent: 'Last 5 minutes',
         failure: 'Latest failure',
         recovery: 'Recovery',

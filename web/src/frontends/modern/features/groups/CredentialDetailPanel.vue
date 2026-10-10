@@ -48,6 +48,7 @@ const saved = ref<CredentialRow>()
 const nameDirty = ref(false)
 const namePending = ref(false)
 const weight = ref('')
+const cap = ref('')
 const proxyMode = ref('inherit')
 const proxyID = ref('')
 const saving = ref(false)
@@ -61,6 +62,7 @@ const dirty = computed(
     Boolean(saved.value) &&
     (nameDirty.value ||
       weight.value !== String(saved.value!.weightManual ?? '') ||
+      cap.value !== (saved.value!.concurrencyLimit === null || saved.value!.concurrencyLimit === undefined ? '' : String(saved.value!.concurrencyLimit)) ||
       proxyMode.value !== saved.value!.proxy.mode ||
       (Boolean(proxyID.value) && Number(proxyID.value) !== saved.value?.proxy.id)),
 )
@@ -70,6 +72,7 @@ watch(
     if (!value || dirty.value || saving.value) return
     saved.value = value
     weight.value = String(value.weightManual ?? '')
+    cap.value = value.concurrencyLimit === null || value.concurrencyLimit === undefined ? '' : String(value.concurrencyLimit)
     proxyMode.value = value.proxy.mode
     proxyID.value = ''
   },
@@ -81,6 +84,11 @@ const weightInvalid = computed(
     (!/^\d+$/u.test(weight.value) ||
       (Number(weight.value) < 1 && Number(weight.value) !== saved.value?.weight) ||
       Number(weight.value) > 100),
+)
+const capInvalid = computed(
+  () =>
+    Boolean(cap.value) &&
+    (!/^\d+$/u.test(cap.value) || Number(cap.value) > 64),
 )
 const proxyChanged = computed(
   () =>
@@ -108,10 +116,12 @@ function failure(): string {
 async function save(): Promise<void> {
   if (!saved.value || !dirty.value || saving.value) return
   attempted.value = true
-  if (weightInvalid.value || proxyInvalid.value) return
+  if (weightInvalid.value || capInvalid.value || proxyInvalid.value) return
   const patch: Parameters<typeof updateCredential>[3] = {}
   if (weight.value !== String(saved.value.weightManual ?? ''))
     patch.weight_manual = weight.value ? Number(weight.value) : null
+  const savedCap = saved.value.concurrencyLimit === null || saved.value.concurrencyLimit === undefined ? '' : String(saved.value.concurrencyLimit)
+  if (cap.value !== savedCap) patch.concurrency_limit = cap.value ? Number(cap.value) : null
   if (proxyChanged.value)
     patch.proxy =
       proxyMode.value === 'inherit'
@@ -308,6 +318,15 @@ useMessageSource(() =>
             inputmode="numeric"
             :disabled="saving"
             :error="attempted && weightInvalid ? t('groups.edit.weightError') : undefined"
+          />
+          <AppTextField
+            v-model="cap"
+            :label="t('credentialCards.cap')"
+            :placeholder="t('credentialCards.capInherit', { cap: item.effectiveConcurrencyLimit })"
+            size="sm"
+            inputmode="numeric"
+            :disabled="saving"
+            :error="attempted && capInvalid ? t('credentialCards.capError') : undefined"
           />
           <AppSegmentedField
             v-if="channel?.proxy"

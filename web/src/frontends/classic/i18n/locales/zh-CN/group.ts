@@ -424,6 +424,12 @@ export default {
       cardLabel: '渠道凭据 {mask}',
       weightFor: '{mask} 的权重',
       weight: '{weight}',
+      editCap: '编辑并发上限',
+      capInherit: '跟随全局（当前 {cap}）',
+      capEditor: {
+        value: '并发上限',
+        invalid: '请输入 0–64 之间的整数，留空跟随全局',
+      },
       editWeight: '编辑权重',
       weightEditor: {
         title: '调度权重',
@@ -524,6 +530,7 @@ export default {
         credential: '密钥',
         status: '状态',
         weight: '权重',
+                cap: '并发上限',
         recent: '近 5 分钟',
         failure: '最近失败',
         recovery: '恢复',

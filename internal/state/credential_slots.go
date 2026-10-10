@@ -11,18 +11,19 @@ import (
 // cap 来源于 credential_concurrency_limit 运行时设置; 0 表示不限制。
 // 计数器而非信号量: cap 变更只改阈值, 在途请求自然排空, 无重建与释放配对问题。
 type CredentialSlots struct {
-	capacity    atomic.Int64 // <=0 表示不限制
-	mu          sync.RWMutex
-	counters    map[uint]*atomic.Int64
-	waiting     map[uint]*atomic.Int64
-	notify      chan struct{} // Release 时关闭并换新, 等待者借此唤醒
-	lastAnyPick uint          // tryAcquireAnyWithin 最近选中并已占位的凭证
+	capacity atomic.Int64 // 全局默认 cap, <=0 表示不限制
+	mu       sync.RWMutex
+	counters map[uint]*atomic.Int64
+	waiting  map[uint]*atomic.Int64
+	limits   map[uint]int64 // 每凭证覆盖: >0 生效, 覆盖全局 cap
+	notify   chan struct{}  // Release 时关闭并换新, 等待者借此唤醒
 }
 
 func NewCredentialSlots(capacity int) *CredentialSlots {
 	slots := &CredentialSlots{
 		counters: make(map[uint]*atomic.Int64),
 		waiting:  make(map[uint]*atomic.Int64),
+		limits:   make(map[uint]int64),
 		notify:   make(chan struct{}),
 	}
 	slots.capacity.Store(int64(capacity))
@@ -43,6 +44,47 @@ func (slots *CredentialSlots) Capacity() int {
 		return 0
 	}
 	return int(slots.capacity.Load())
+}
+
+// SetLimits 整表替换每凭证 cap 覆盖(仅保留 >0 项)。注册表在
+// ReplaceCredentials 时同步, 与凭证增删一致。
+func (slots *CredentialSlots) SetLimits(limits map[uint]int64) {
+	if slots == nil {
+		return
+	}
+	filtered := make(map[uint]int64, len(limits))
+	for id, limit := range limits {
+		if limit > 0 {
+			filtered[id] = limit
+		}
+	}
+	slots.mu.Lock()
+	slots.limits = filtered
+	slots.mu.Unlock()
+}
+
+// limitFor 返回该凭证生效的 cap: 覆盖 > 0 时覆盖全局, 否则用全局值。
+func (slots *CredentialSlots) limitFor(id uint) int64 {
+	if slots == nil {
+		return 0
+	}
+	slots.mu.RLock()
+	override := slots.limits[id]
+	slots.mu.RUnlock()
+	if override > 0 {
+		return override
+	}
+	return slots.capacity.Load()
+}
+
+// BudgetFor 返回该凭证的预算档 = 生效 cap + 固定浮动。
+func (slots *CredentialSlots) BudgetFor(id uint) int64 {
+	return slots.limitFor(id) + CredentialQueueSlack
+}
+
+// EffectiveLimit 返回该凭证生效 cap, 供展示。
+func (slots *CredentialSlots) EffectiveLimit(id uint) int64 {
+	return slots.limitFor(id)
 }
 
 func (slots *CredentialSlots) counter(id uint) *atomic.Int64 {
@@ -86,12 +128,12 @@ func (slots *CredentialSlots) TryAcquire(id uint) bool {
 	if slots == nil {
 		return true
 	}
-	capacity := slots.capacity.Load()
-	if capacity <= 0 {
+	limit := slots.limitFor(id)
+	if limit <= 0 {
 		slots.counter(id).Add(1)
 		return true
 	}
-	return slots.TryAcquireWithin(id, capacity)
+	return slots.TryAcquireWithin(id, limit)
 }
 
 // TryAcquireWithin 在途数未达显式 limit 时占一个槽位, limit<=0 视为不限制。
@@ -156,14 +198,13 @@ func (slots *CredentialSlots) AcquireWithinWait(
 func (slots *CredentialSlots) AcquireAnyWithin(
 	ids []uint,
 	preferred uint,
-	limit int64,
 	timeout time.Duration,
 	done <-chan struct{},
 ) (uint, bool) {
 	if slots == nil || len(ids) == 0 {
 		return 0, false
 	}
-	if id, ok := slots.tryAcquireAnyWithin(ids, preferred, limit); ok {
+	if id, ok := slots.tryAcquireAnyWithin(ids, preferred); ok {
 		return id, true
 	}
 	waiters := make([]*atomic.Int64, 0, len(ids))
@@ -178,7 +219,7 @@ func (slots *CredentialSlots) AcquireAnyWithin(
 	}()
 	deadline := time.After(timeout)
 	for {
-		if id, ok := slots.tryAcquireAnyWithin(ids, preferred, limit); ok {
+		if id, ok := slots.tryAcquireAnyWithin(ids, preferred); ok {
 			return id, true
 		}
 		notify := slots.notifyChannel()
@@ -194,9 +235,9 @@ func (slots *CredentialSlots) AcquireAnyWithin(
 
 // tryAcquireAnyWithin 按优先序尝试候选: preferred 最先, 其余按在途升序。
 // 返回成功占位的凭证; 全部达 limit 时 ok=false。
-func (slots *CredentialSlots) tryAcquireAnyWithin(ids []uint, preferred uint, limit int64) (uint, bool) {
+func (slots *CredentialSlots) tryAcquireAnyWithin(ids []uint, preferred uint) (uint, bool) {
 	if preferred != 0 {
-		if slots.TryAcquireWithin(preferred, limit) {
+		if slots.TryAcquireWithin(preferred, slots.BudgetFor(preferred)) {
 			return preferred, true
 		}
 	}
@@ -210,7 +251,7 @@ func (slots *CredentialSlots) tryAcquireAnyWithin(ids []uint, preferred uint, li
 		return slots.Inflight(ordered[i]) < slots.Inflight(ordered[j])
 	})
 	for _, id := range ordered {
-		if slots.TryAcquireWithin(id, limit) {
+		if slots.TryAcquireWithin(id, slots.BudgetFor(id)) {
 			return id, true
 		}
 	}
@@ -284,9 +325,9 @@ func (slots *CredentialSlots) Available(id uint) bool {
 	if slots == nil {
 		return true
 	}
-	capacity := slots.capacity.Load()
-	if capacity <= 0 {
+	limit := slots.limitFor(id)
+	if limit <= 0 {
 		return true
 	}
-	return slots.Inflight(id) < capacity
+	return slots.Inflight(id) < limit
 }

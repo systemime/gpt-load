@@ -135,19 +135,22 @@ func mapCredentialRuntimeItem(
 	bucket healthBucket,
 	stats health.CredentialStats,
 	observedAt time.Time,
+	globalConcurrencyLimit int,
 ) (CredentialItemResponse, error) {
 	item := CredentialItemResponse{
-		CredentialID:            credentialID,
-		Mask:                    mask,
-		ConfiguredStatus:        string(view.Status),
-		EffectiveStatus:         string(bucket),
-		Weight:                  state.ConfiguredWeight(view.WeightManual),
-		WeightManual:            cloneInt(view.WeightManual),
-		RecentSuccessCount:      stats.Success,
-		RecentFailureCount:      stats.Failure,
-		ConsecutiveFailureCount: stats.ConsecutiveFailure,
-		LastFailureCategory:     normalizeCredentialFailureCategory(stats.LastFailureCategory).String(),
-		LastStatusCode:          optionalHealthStatusCode(stats.LastStatusCode),
+		CredentialID:              credentialID,
+		Mask:                      mask,
+		ConfiguredStatus:          string(view.Status),
+		EffectiveStatus:           string(bucket),
+		Weight:                    state.ConfiguredWeight(view.WeightManual),
+		WeightManual:              cloneInt(view.WeightManual),
+		ConcurrencyLimit:          cloneInt(view.ConcurrencyLimit),
+		EffectiveConcurrencyLimit: effectiveCredentialConcurrencyLimit(view.ConcurrencyLimit, globalConcurrencyLimit),
+		RecentSuccessCount:        stats.Success,
+		RecentFailureCount:        stats.Failure,
+		ConsecutiveFailureCount:   stats.ConsecutiveFailure,
+		LastFailureCategory:       normalizeCredentialFailureCategory(stats.LastFailureCategory).String(),
+		LastStatusCode:            optionalHealthStatusCode(stats.LastStatusCode),
 	}
 	limits, err := modelCooldownResponses(view.ModelCooldowns, observedAt)
 	if err != nil {
@@ -212,4 +215,11 @@ func credentialCollectionTotalPages(totalItems, pageSize int) int {
 		return 0
 	}
 	return (totalItems + pageSize - 1) / pageSize
+}
+
+func effectiveCredentialConcurrencyLimit(override *int, globalLimit int) int {
+	if override != nil && *override > 0 {
+		return *override
+	}
+	return globalLimit
 }

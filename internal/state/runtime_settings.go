@@ -67,7 +67,7 @@ const (
 	maxAffinityCapacity            = 1_000_000
 	// 每凭证并发上限默认值 = 实测厂商硬顶(≈8, code 1302)减 2 余量; 0 表示不限制。
 	defaultCredentialConcurrencyLimit = 6
-	maxCredentialConcurrencyLimit     = 64
+	MaxCredentialConcurrencyLimit     = 64
 	// CredentialQueueSlack 是组预算浮动: 全池达 cap 后每凭证最多再放行这么多, 超出进入排队。
 	CredentialQueueSlack          = 2
 	minCredentialQueueTimeout     = 1
@@ -282,7 +282,7 @@ func ResolveRuntimeSettings(settings config.Settings) (RuntimeSettings, error) {
 			}
 			resolved.AffinityCapacity = capacity
 		case SettingCredentialConcurrencyLimit:
-			limit, err := wholeNumberInRange(key, value, 0, maxCredentialConcurrencyLimit)
+			limit, err := wholeNumberInRange(key, value, 0, MaxCredentialConcurrencyLimit)
 			if err != nil {
 				return RuntimeSettings{}, err
 			}
@@ -467,7 +467,7 @@ func ValidateRuntimeSetting(key string, value any) error {
 		_, err := wholeNumberInRange(key, value, 1, maxAffinityCapacity)
 		return err
 	case SettingCredentialConcurrencyLimit:
-		_, err := wholeNumberInRange(key, value, 0, maxCredentialConcurrencyLimit)
+		_, err := wholeNumberInRange(key, value, 0, MaxCredentialConcurrencyLimit)
 		return err
 	case SettingCredentialQueueEnabled:
 		_, err := strictBoolean(key, value)

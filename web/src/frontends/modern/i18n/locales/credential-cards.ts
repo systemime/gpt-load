@@ -97,6 +97,9 @@ export const zhCN = {
   cooldownModels: '冷却中的模型',
   autoWeight: '留空使用默认权重；手动权重范围为 1–100。',
   automatic: '默认',
+  cap: '并发上限',
+  capInherit: '跟随全局（当前 {cap}）',
+  capError: '请输入 0–64 之间的整数',
   observation: {
     fresh: '已同步',
     stale: '数据待更新',
@@ -238,6 +241,9 @@ export const enUS: typeof zhCN = {
   cooldownModels: 'Models cooling down',
   autoWeight: 'Leave empty to use the default weight. Manual weight: 1–100.',
   automatic: 'Default',
+  cap: 'Concurrency cap',
+  capInherit: 'Follow global (now {cap})',
+  capError: 'Enter a whole number between 0 and 64',
   observation: {
     fresh: 'Synced',
     stale: 'Needs update',
@@ -383,6 +389,9 @@ export const jaJP: typeof zhCN = {
   cooldownModels: 'クールダウン中のモデル',
   autoWeight: '空欄の場合は既定の重みを使用します。手動の重みは 1–100。',
   automatic: '既定',
+  cap: '同時実行上限',
+  capInherit: 'グローバルに従う（現在 {cap}）',
+  capError: '0～64 の整数を入力してください',
   observation: {
     fresh: '同期済み',
     stale: '更新が必要',

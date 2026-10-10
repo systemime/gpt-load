@@ -53,9 +53,9 @@ func (handler *Handler) admitBeyondCap(
 		slots.ForceAcquire(selection.CredentialID)
 		return selection, ref, true
 	}
-	budgetPerCredential := int64(capacity) + state.CredentialQueueSlack
 	ids := make([]uint, 0, len(allowedCredentialRefs))
 	maxWaiting := int64(0)
+	maxBudget := int64(0)
 	for id := range allowedCredentialRefs {
 		if id == 0 {
 			continue
@@ -64,24 +64,27 @@ func (handler *Handler) admitBeyondCap(
 		if waiting := slots.Waiting(id); waiting > maxWaiting {
 			maxWaiting = waiting
 		}
+		if budget := slots.BudgetFor(id); budget > maxBudget {
+			maxBudget = budget
+		}
 	}
 	queueEnabled := snapshot.Settings.CredentialQueueEnabled
 	if !queueEnabled {
 		// 排队关闭: 预算内重选, 全满则直接放行原候选(永不因 cap 拒绝)。
-		id, ok := slots.AcquireAnyWithin(ids, preferredCredentialID, budgetPerCredential, 0, neverDone)
+		id, ok := slots.AcquireAnyWithin(ids, preferredCredentialID, 0, neverDone)
 		if !ok {
 			slots.ForceAcquire(selection.CredentialID)
 			return selection, ref, true
 		}
 		return handler.selectionForBudgetCredential(snapshot, baseQuery, allowedCredentialRefs, id, selection, ref)
 	}
-	if maxWaiting >= budgetPerCredential*2 {
+	if maxWaiting >= maxBudget*2 {
 		// 防雪崩: 深度超限即拒绝, 不再堆等待者。
 		handler.rejectQueued(ginContext, recorder, snapshot)
 		return scheduler.Selection{}, state.CredentialRef{}, false
 	}
 	id, ok := slots.AcquireAnyWithin(
-		ids, preferredCredentialID, budgetPerCredential,
+		ids, preferredCredentialID,
 		snapshot.Settings.CredentialQueueTimeout, ginContext.Request.Context().Done(),
 	)
 	if !ok {

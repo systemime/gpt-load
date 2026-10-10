@@ -923,7 +923,7 @@ func mapCredentialConfigs(
 	for _, row := range rows {
 		target := targets[row.GroupID]
 		result = append(result, state.CredentialConfig{
-			ID: row.ID, GroupID: row.GroupID, WeightManual: cloneWeight(row.WeightManual),
+			ID: row.ID, GroupID: row.GroupID, WeightManual: cloneWeight(row.WeightManual), ConcurrencyLimit: cloneWeight(row.ConcurrencyLimit),
 			Status:  state.CredentialStatus(row.Status),
 			Version: credentialVersion(row.SecretVersion),
 			IdentityGeneration: CredentialIdentityGeneration(
@@ -953,7 +953,7 @@ func mapCredentials(rows []models.Credential, groups []models.Group) []state.Cre
 				target.connectionType,
 				target.params,
 			),
-			Fingerprint: row.Fingerprint, WeightManual: cloneWeight(row.WeightManual),
+			Fingerprint: row.Fingerprint, WeightManual: cloneWeight(row.WeightManual), ConcurrencyLimit: cloneWeight(row.ConcurrencyLimit),
 			Status: state.CredentialStatus(row.Status), AuthState: state.CredentialAuthState(row.AuthState), EncryptedValue: row.Data,
 		})
 	}

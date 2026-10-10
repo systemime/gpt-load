@@ -67,6 +67,7 @@ type CredentialConfig struct {
 	GroupID            uint
 	Status             CredentialStatus
 	WeightManual       *int
+	ConcurrencyLimit   *int
 	Version            uint64
 	IdentityGeneration uint64
 	Fingerprint        string

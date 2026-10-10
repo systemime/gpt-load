@@ -46,6 +46,8 @@ const emit = defineEmits<{
   'update:weightEditorOpen': [open: boolean]
   'open-weight': [item: CredentialItemDto]
   weight: [payload: { item: CredentialItemDto; value: string }]
+  'update:capEditorOpen': [open: boolean]
+  cap: [payload: { item: CredentialItemDto; value: string | null }]
   toggle: [item: CredentialItemDto]
   test: [item: CredentialItemDto]
   restore: [item: CredentialItemDto]
@@ -56,6 +58,29 @@ const menuOpen = ref(false)
 const draftWeight = ref('50')
 const detailId = computed(() => `group-credential-details-${props.item.credential_id}`)
 const weightInputId = computed(() => `group-credential-weight-${props.item.credential_id}`)
+const capInputId = computed(() => `group-credential-cap-${props.item.credential_id}`)
+const capEditorOpen = ref(false)
+const draftCap = ref('')
+const capValid = computed(() => {
+  if (draftCap.value.trim() === '') return true
+  const value = Number(draftCap.value)
+  return Number.isInteger(value) && value >= 0 && value <= 64
+})
+watch(capEditorOpen, (open) => {
+  if (open) {
+    draftCap.value =
+      props.item.concurrency_limit === null ? '' : String(props.item.concurrency_limit)
+  }
+})
+function saveCap(): void {
+  if (props.busy || !capValid.value) return
+  const trimmed = draftCap.value.trim()
+  emit('cap', {
+    item: props.item,
+    value: trimmed === '' ? null : trimmed,
+  })
+  capEditorOpen.value = false
+}
 const isProblem = computed(
   () =>
     props.item.effective_status === 'cooldown' ||
@@ -331,6 +356,63 @@ function runMenuAction(action: 'test' | 'toggle' | 'restore' | 'remove'): void {
                   </div>
                   <p v-if="!weightValid" class="setting-panel__error" role="alert">
                     {{ t('group.credentials.weightEditor.invalid') }}
+                  </p>
+                </form>
+              </div>
+            </div>
+
+            <div class="setting-panel">
+              <span class="setting-panel__title">
+                {{ t('group.credentials.columns.cap') }}
+              </span>
+              <div class="setting-panel__body">
+                <template v-if="!capEditorOpen">
+                  <span class="setting-panel__value">
+                    {{
+                      item.concurrency_limit === null
+                        ? t('group.credentials.capInherit', {
+                            cap: n(item.effective_concurrency_limit),
+                          })
+                        : n(item.concurrency_limit)
+                    }}
+                  </span>
+                  <IconButton
+                    class="setting-panel__edit"
+                    variant="ghost"
+                    tone="action"
+                    size="xs"
+                    :label="t('group.credentials.editCap')"
+                    :disabled="busy"
+                    @click="capEditorOpen = true"
+                  >
+                    <PencilLine :size="12" aria-hidden="true" />
+                  </IconButton>
+                </template>
+                <form v-else class="setting-panel__form" @submit.prevent="saveCap">
+                  <label class="sr-only" :for="capInputId">
+                    {{ t('group.credentials.capEditor.value') }}
+                  </label>
+                  <input
+                    :id="capInputId"
+                    v-model="draftCap"
+                    type="number"
+                    min="0"
+                    max="64"
+                    step="1"
+                    inputmode="numeric"
+                    :disabled="busy"
+                    :aria-invalid="!capValid || undefined"
+                  />
+                  <div class="setting-panel__actions">
+                    <AppButton variant="ghost" size="compact" @click="capEditorOpen = false">
+                      {{ t('group.credentials.weightEditor.cancel') }}
+                    </AppButton>
+                    <AppButton type="submit" size="compact" :disabled="busy || !capValid">
+                      {{ t('group.credentials.weightEditor.save') }}
+                    </AppButton>
+                  </div>
+                  <p v-if="!capValid" class="setting-panel__error" role="alert">
+                    {{ t('group.credentials.capEditor.invalid') }}
                   </p>
                 </form>
               </div>

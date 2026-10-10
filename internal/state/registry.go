@@ -35,6 +35,7 @@ type CredentialEntry struct {
 	IdentityGeneration      uint64
 	Fingerprint             string
 	WeightManual            *int
+	ConcurrencyLimit        *int
 	Status                  CredentialStatus
 	AuthState               CredentialAuthState
 	CooldownUntil           time.Time
@@ -128,6 +129,10 @@ func ValidateCredentialEntries(entries []CredentialEntry) error {
 		if err := validateManualWeight(fmt.Sprintf("credential %d", entry.ID), entry.WeightManual); err != nil {
 			return err
 		}
+		if entry.ConcurrencyLimit != nil &&
+			(*entry.ConcurrencyLimit < 0 || *entry.ConcurrencyLimit > MaxCredentialConcurrencyLimit) {
+			return fmt.Errorf("credential %d concurrency limit must be between 0 and %d", entry.ID, MaxCredentialConcurrencyLimit)
+		}
 		if entry.EncryptedValue == "" {
 			return fmt.Errorf("credential %d encrypted value is required", entry.ID)
 		}
@@ -166,6 +171,14 @@ func (r *CredentialRegistry) ReplaceCredentials(entries []CredentialEntry) error
 		buckets[entry.GroupID][entry.ID] = &cloned
 		credentialGroups[entry.ID] = entry.GroupID
 	}
+
+	limits := make(map[uint]int64, len(entries))
+	for _, entry := range entries {
+		if entry.ConcurrencyLimit != nil {
+			limits[entry.ID] = int64(*entry.ConcurrencyLimit)
+		}
+	}
+	r.slots.SetLimits(limits)
 
 	r.mu.Lock()
 	for groupID, bucket := range buckets {
@@ -1067,6 +1080,7 @@ func (r *CredentialRegistry) entryLocked(credentialID uint) (*CredentialEntry, b
 
 func cloneCredentialEntry(entry CredentialEntry) CredentialEntry {
 	entry.WeightManual = cloneWeight(entry.WeightManual)
+	entry.ConcurrencyLimit = cloneWeight(entry.ConcurrencyLimit)
 	entry.quotaRemaining = cloneFloat(entry.quotaRemaining)
 	entry.FailureGeneration = 0
 	entry.ModelCooldowns = cloneModelCooldowns(entry.ModelCooldowns)

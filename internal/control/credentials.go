@@ -32,10 +32,11 @@ type CredentialImportResult struct {
 }
 
 type CredentialUpdateRequest struct {
-	Name         optionalField[string]                 `json:"name"`
-	Status       optionalField[state.CredentialStatus] `json:"status"`
-	WeightManual optionalField[int]                    `json:"weight_manual"`
-	Proxy        optionalField[outboundproxy.Config]   `json:"proxy"`
+	Name             optionalField[string]                 `json:"name"`
+	Status           optionalField[state.CredentialStatus] `json:"status"`
+	WeightManual     optionalField[int]                    `json:"weight_manual"`
+	ConcurrencyLimit optionalField[int]                    `json:"concurrency_limit"`
+	Proxy            optionalField[outboundproxy.Config]   `json:"proxy"`
 }
 
 type CredentialRevealResult struct {
@@ -77,31 +78,33 @@ type CredentialAccountResponse struct {
 }
 
 type CredentialItemResponse struct {
-	Name                    string                         `json:"name"`
-	RPMPeakHour             *int64                         `json:"-"`
-	ModelCooldowns          []ModelCooldownResponse        `json:"model_cooldowns"`
-	CredentialID            uint                           `json:"credential_id"`
-	ConnectionType          string                         `json:"connection_type"`
-	SecretVersion           uint64                         `json:"secret_version"`
-	Mask                    string                         `json:"mask"`
-	Account                 CredentialAccountResponse      `json:"account"`
-	AuthState               string                         `json:"auth_state"`
-	AuthErrorCode           string                         `json:"auth_error_code,omitempty"`
-	Observation             *CredentialObservationResponse `json:"observation,omitempty"`
-	ConfiguredStatus        string                         `json:"configured_status"`
-	EffectiveStatus         string                         `json:"effective_status"`
-	Weight                  int                            `json:"weight"`
-	WeightManual            *int                           `json:"-"` // 仅新版展示投影使用，经典接口不增加字段。
-	RecentSuccessCount      uint64                         `json:"recent_success_count"`
-	RecentFailureCount      uint64                         `json:"recent_failure_count"`
-	ConsecutiveFailureCount uint64                         `json:"consecutive_failure_count"`
-	LastFailureCategory     string                         `json:"last_failure_category"`
-	LastStatusCode          *int                           `json:"last_status_code"`
-	CooldownUntilMS         *int64                         `json:"cooldown_until_ms"`
-	LastUsedAtMS            *int64                         `json:"last_used_at_ms,omitempty"`
-	DailyUsage              *CredentialDailyUsageResponse  `json:"daily_usage,omitempty"`
-	Recovery                CredentialRecoveryResponse     `json:"recovery"`
-	Proxy                   outboundproxy.View             `json:"proxy"`
+	Name                      string                         `json:"name"`
+	RPMPeakHour               *int64                         `json:"-"`
+	ModelCooldowns            []ModelCooldownResponse        `json:"model_cooldowns"`
+	CredentialID              uint                           `json:"credential_id"`
+	ConnectionType            string                         `json:"connection_type"`
+	SecretVersion             uint64                         `json:"secret_version"`
+	Mask                      string                         `json:"mask"`
+	Account                   CredentialAccountResponse      `json:"account"`
+	AuthState                 string                         `json:"auth_state"`
+	AuthErrorCode             string                         `json:"auth_error_code,omitempty"`
+	Observation               *CredentialObservationResponse `json:"observation,omitempty"`
+	ConfiguredStatus          string                         `json:"configured_status"`
+	EffectiveStatus           string                         `json:"effective_status"`
+	Weight                    int                            `json:"weight"`
+	WeightManual              *int                           `json:"-"` // 仅新版展示投影使用，经典接口不增加字段。
+	ConcurrencyLimit          *int                           `json:"concurrency_limit"`
+	EffectiveConcurrencyLimit int                            `json:"effective_concurrency_limit"`
+	RecentSuccessCount        uint64                         `json:"recent_success_count"`
+	RecentFailureCount        uint64                         `json:"recent_failure_count"`
+	ConsecutiveFailureCount   uint64                         `json:"consecutive_failure_count"`
+	LastFailureCategory       string                         `json:"last_failure_category"`
+	LastStatusCode            *int                           `json:"last_status_code"`
+	CooldownUntilMS           *int64                         `json:"cooldown_until_ms"`
+	LastUsedAtMS              *int64                         `json:"last_used_at_ms,omitempty"`
+	DailyUsage                *CredentialDailyUsageResponse  `json:"daily_usage,omitempty"`
+	Recovery                  CredentialRecoveryResponse     `json:"recovery"`
+	Proxy                     outboundproxy.View             `json:"proxy"`
 }
 
 // CredentialDailyUsageResponse 汇报固定 24 小时窗口内的上游尝试结果分布。
@@ -433,6 +436,7 @@ func (s *Service) mapCredentialCollection(
 		bucket := classifyHealthKey(group, view, observation.observedAt)
 		item, err := mapCredentialRuntimeItem(
 			mask, row.ID, view, bucket, s.stats.Snapshot(row.ID, observation.observedAt), observation.observedAt,
+			s.effectiveGlobalConcurrencyLimit(),
 		)
 		if err != nil {
 			return CredentialCollectionResponse{}, err
@@ -546,4 +550,14 @@ func credentialCollectionPage(records []credentialCollectionRecord, page, pageSi
 		items[index] = record.item
 	}
 	return items
+}
+
+func (service *Service) effectiveGlobalConcurrencyLimit() int {
+	if service == nil || service.manager == nil {
+		return 0
+	}
+	if snapshot := service.manager.Current(); snapshot != nil {
+		return snapshot.Settings.CredentialConcurrencyLimit
+	}
+	return 0
 }
