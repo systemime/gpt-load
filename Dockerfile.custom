@@ -9,6 +9,9 @@
 # 构建阶段与官方 Dockerfile 保持一致(pin 过的基础镜像与构建参数),
 # 便于上游更新时对照同步。
 
+# 全局 ARG: 必须位于首个 FROM 之前, 才能在后续阶段的 FROM 中展开。
+ARG BASE_IMAGE=ghcr.io/tbphp/gpt-load:2
+
 # ---------- 前端: pnpm 构建, 产物嵌入 Go 二进制 ----------
 FROM --platform=$BUILDPLATFORM node:24.18.0-alpine3.24@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS web-builder
 
@@ -51,7 +54,6 @@ RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
 # ---------- 覆盖层: 官方镜像 + 新二进制 ----------
 # 基础镜像自带 alpine 运行时、10001 用户、/app/data 卷、ENTRYPOINT,
 # 仅覆盖 /app/gpt-load 并修正属主与可执行位。
-ARG BASE_IMAGE=ghcr.io/tbphp/gpt-load:2
 FROM ${BASE_IMAGE}
 
 ARG VERSION=2.0.0-cap
