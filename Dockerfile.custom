@@ -1,0 +1,66 @@
+# 基于官方 gpt-load 镜像的二次构建: 只替换 /app/gpt-load 二进制,
+# 沿用官方 runtime 的用户/权限/入口/卷约定, 数据卷完全兼容(同 SQLite 布局)。
+#
+# 用法:
+#   docker build -f Dockerfile.custom -t gpt-load:cap --build-arg VERSION=2.0.0-cap .
+# 服务器走镜像代理时:
+#   --build-arg BASE_IMAGE=ghcr.nju.edu.cn/tbphp/gpt-load:2
+#
+# 构建阶段与官方 Dockerfile 保持一致(pin 过的基础镜像与构建参数),
+# 便于上游更新时对照同步。
+
+# ---------- 前端: pnpm 构建, 产物嵌入 Go 二进制 ----------
+FROM --platform=$BUILDPLATFORM node:24.18.0-alpine3.24@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS web-builder
+
+WORKDIR /build
+RUN corepack enable \
+    && corepack install --global pnpm@11.17.0
+
+COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./web/
+RUN pnpm --dir web install --frozen-lockfile
+
+COPY internal/webui/page_routes.json internal/webui/modern_page_routes.json ./internal/webui/
+COPY web ./web
+RUN pnpm --dir web run build
+
+# ---------- 后端: 静态编译 gpt-load ----------
+FROM --platform=$BUILDPLATFORM golang:1.27.0-alpine3.24@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS go-builder
+
+ARG VERSION=2.0.0-cap
+ARG TARGETOS
+ARG TARGETARCH
+# GOPROXY 使用竖线分隔：任何错误（含网络错误）都回退到下一个源。
+ENV GO111MODULE=on \
+    CGO_ENABLED=0 \
+    GOPROXY="https://proxy.golang.org|direct"
+
+WORKDIR /build
+
+COPY go.mod go.sum ./
+COPY third_party/cpaembedded/go.mod third_party/cpaembedded/go.sum ./third_party/cpaembedded/
+RUN go mod download
+
+COPY *.go ./
+COPY internal ./internal
+COPY third_party/cpaembedded ./third_party/cpaembedded
+COPY --from=web-builder /build/internal/webui/dist ./internal/webui/dist
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+    -ldflags "-s -w -X gpt-load/internal/platform/version.Version=${VERSION}" \
+    -o gpt-load
+
+# ---------- 覆盖层: 官方镜像 + 新二进制 ----------
+# 基础镜像自带 alpine 运行时、10001 用户、/app/data 卷、ENTRYPOINT,
+# 仅覆盖 /app/gpt-load 并修正属主与可执行位。
+ARG BASE_IMAGE=ghcr.io/tbphp/gpt-load:2
+FROM ${BASE_IMAGE}
+
+ARG VERSION=2.0.0-cap
+LABEL org.opencontainers.image.title="gpt-load (credential-concurrency-cap)" \
+    org.opencontainers.image.description="官方 gpt-load:2 覆盖每凭证并发上限/排队准入/凭证负载页分支二进制" \
+    org.opencontainers.image.version="${VERSION}"
+
+USER root
+COPY --from=go-builder --chmod=0755 /build/gpt-load /app/gpt-load.new
+RUN mv /app/gpt-load.new /app/gpt-load \
+    && chown 10001:10001 /app/gpt-load
+USER 10001:10001
