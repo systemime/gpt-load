@@ -71,7 +71,12 @@ const filters = computed(() => {
 })
 
 const overviewQuery = useQuery({
-  queryKey: ['modern', 'usage-overview', filters.value],
+  // key 必须响应式: 筛选变化时 vue-query 以新 key 重新请求
+  queryKey: computed(() => [
+    'modern',
+    'usage-overview',
+    { ...filters.value },
+  ]),
   queryFn: ({ signal }) => getUsageOverview(client, filters.value, signal),
 })
 
