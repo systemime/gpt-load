@@ -34,8 +34,14 @@ const PALETTE = [
   '#06b6d4',
   '#84cc16',
 ]
-const BAR_WIDTH = 18
-const CHART_HEIGHT = 180
+const CHART_WIDTH = 1000
+const CHART_HEIGHT = 260
+const PLOT_LEFT = 56
+const PLOT_RIGHT = 16
+const PLOT_TOP = 12
+const PLOT_BOTTOM = 26
+const PLOT_WIDTH = CHART_WIDTH - PLOT_LEFT - PLOT_RIGHT
+const PLOT_HEIGHT = CHART_HEIGHT - PLOT_TOP - PLOT_BOTTOM
 
 const client = useApiClient()
 const { t } = useI18n()
@@ -170,8 +176,51 @@ const donut = computed(() => {
 })
 
 // ---------- 堆叠柱 ----------
+const yTicks = computed(() => {
+  const peak = chartPeak.value
+  return [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+    const value = Math.round(peak * ratio)
+    const y = PLOT_TOP + PLOT_HEIGHT - ratio * PLOT_HEIGHT
+    return { value, y, label: formatCompact(value) }
+  })
+})
+
+const chartPeak = computed(() => {
+  const points = report.value?.points ?? []
+  const byDay = new Map<number, number>()
+  for (const point of points) {
+    const value = metric.value === 'requests' ? point.requests : point.tokens
+    byDay.set(point.dayMS, (byDay.get(point.dayMS) ?? 0) + value)
+  }
+  return Math.max(1, ...byDay.values())
+})
+
+const chartDays = computed(() => {
+  const days = new Set<number>()
+  for (const point of report.value?.points ?? []) days.add(point.dayMS)
+  return [...days].sort((left, right) => left - right)
+})
+
+const xLabelFor = (day: number) => {
+  const date = new Date(day)
+  return `${date.getMonth() + 1}/${date.getDate()}`
+}
+
+const xTickValues = computed(() => {
+  const days = chartDays.value
+  if (days.length === 0) return []
+  const step = Math.ceil(days.length / 12)
+  return days.filter((_, index) => index % step === 0)
+})
+
 const stacked = computed(() => {
   const points = report.value?.points ?? []
+  const days = chartDays.value
+  if (days.length === 0) {
+    return { bars: [], slots: [] as { x: number; width: number }[], peak: 1, slotWidth: 0 }
+  }
+  const slotWidth = PLOT_WIDTH / days.length
+  const barWidth = Math.min(48, Math.max(6, slotWidth * 0.62))
   const byDay = new Map<number, Map<number, number>>()
   for (const point of points) {
     const value = metric.value === 'requests' ? point.requests : point.tokens
@@ -180,53 +229,60 @@ const stacked = computed(() => {
     const day = byDay.get(point.dayMS)!
     day.set(point.accessKeyID, (day.get(point.accessKeyID) ?? 0) + value)
   }
-  const days = [...byDay.keys()].sort((left, right) => left - right)
-  const dailyTotals = days.map((day) =>
-    [...byDay.get(day)!.values()].reduce((sum, value) => sum + value, 0),
-  )
-  const peak = Math.max(1, ...dailyTotals)
-  const width = Math.max(days.length * BAR_WIDTH + 8, 120)
+  const peak = chartPeak.value
   const bars = days.map((day, index) => {
+    const slotX = PLOT_LEFT + index * slotWidth
+    const barX = slotX + (slotWidth - barWidth) / 2
     let offset = 0
-    const parts = [...byDay.get(day)!.entries()]
+    const dayMap = byDay.get(day) ?? new Map<number, number>()
+    const parts = [...dayMap.entries()]
       .filter(([id]) => personID.value === 0 || id === personID.value)
       .map(([id, value]) => {
-        const partHeight = Math.round((value / peak) * CHART_HEIGHT)
-        const top = CHART_HEIGHT - offset - partHeight
+        const partHeight = Math.round((value / peak) * PLOT_HEIGHT)
+        const top = PLOT_TOP + PLOT_HEIGHT - offset - partHeight
         offset += partHeight
-        return { id, value, y: top, height: Math.max(partHeight, 1) }
+        return { id, value, y: top, height: Math.max(partHeight, value > 0 ? 1 : 0) }
       })
-    return { day, x: index * BAR_WIDTH + 4, parts, total: dailyTotals[index] }
+    return {
+      day,
+      centerX: slotX + slotWidth / 2,
+      barX,
+      barWidth,
+      parts,
+      total: dailyTotalFor(byDay, day),
+    }
   })
-  return { bars, width, days: days.length }
+  return { bars, slots: days.map((day, index) => ({ x: PLOT_LEFT + index * slotWidth, width: slotWidth })), peak, slotWidth }
 })
+
+function dailyTotalFor(byDay: Map<number, Map<number, number>>, day: number): number {
+  return [...(byDay.get(day)?.values() ?? [])].reduce((sum, value) => sum + value, 0)
+}
 
 // ---------- 折线 ----------
 const trend = computed(() => {
   const points = report.value?.points ?? []
+  const days = chartDays.value
   const byDay = new Map<number, number>()
   for (const point of points) {
     const value = metric.value === 'requests' ? point.requests : point.tokens
     byDay.set(point.dayMS, (byDay.get(point.dayMS) ?? 0) + value)
   }
-  const days = [...byDay.keys()].sort((left, right) => left - right)
-  const values = days.map((day) => byDay.get(day) ?? 0)
-  const peak = Math.max(1, ...values)
-  const height = 140
-  const width = Math.max(days.length * BAR_WIDTH + 8, 120)
+  const peak = chartPeak.value
+  const slotWidth = days.length > 0 ? PLOT_WIDTH / days.length : PLOT_WIDTH
   const plotted = days.map((day, index) => {
-    const x = index * BAR_WIDTH + 9
-    const y = height - Math.round((values[index] / peak) * (height - 8)) - 4
-    return { x, y, day, value: values[index] }
+    const value = byDay.get(day) ?? 0
+    return {
+      x: PLOT_LEFT + slotWidth * index + slotWidth / 2,
+      y: PLOT_TOP + PLOT_HEIGHT - Math.round((value / peak) * PLOT_HEIGHT),
+      day,
+      value,
+    }
   })
   const path = plotted.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
-  return { plotted, path, width, height }
+  return { plotted, path }
 })
 
-function dayLabel(dayMS: number): string {
-  const date = new Date(dayMS)
-  return `${date.getMonth() + 1}/${date.getDate()}`
-}
 </script>
 
 <template>
@@ -321,30 +377,43 @@ function dayLabel(dayMS: number): string {
           <h3>{{ t('usageOverview.dailyTitle') }}</h3>
           <div class="modern-usage-overview__scroll">
             <svg
-              :width="stacked.width"
-              :height="CHART_HEIGHT + 18"
-              :viewBox="`0 0 ${stacked.width} ${CHART_HEIGHT + 18}`"
+              :viewBox="`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`"
               role="img"
               :aria-label="t('usageOverview.dailyTitle')"
             >
+              <g v-for="tick in yTicks" :key="'gy' + tick.y">
+                <line
+                  :x1="PLOT_LEFT" :x2="CHART_WIDTH - PLOT_RIGHT"
+                  :y1="tick.y" :y2="tick.y"
+                  stroke="currentColor" opacity="0.12"
+                />
+                <text :x="PLOT_LEFT - 8" :y="tick.y + 4" text-anchor="end" class="modern-usage-overview__tick">
+                  {{ tick.label }}
+                </text>
+              </g>
+              <line
+                :x1="PLOT_LEFT" :x2="CHART_WIDTH - PLOT_RIGHT"
+                :y1="PLOT_TOP + PLOT_HEIGHT" :y2="PLOT_TOP + PLOT_HEIGHT"
+                stroke="currentColor" opacity="0.3"
+              />
               <g v-for="bar in stacked.bars" :key="bar.day">
                 <rect
                   v-for="part in bar.parts"
                   :key="part.id"
-                  :x="bar.x"
+                  :x="bar.barX"
                   :y="part.y"
-                  width="12"
+                  :width="bar.barWidth"
                   :height="part.height"
                   :fill="personColor.get(part.id) ?? PALETTE[0]"
                 />
                 <text
-                  v-if="stacked.days <= 32"
-                  :x="bar.x + 6"
-                  :y="CHART_HEIGHT + 14"
+                  v-if="xTickValues.includes(bar.day)"
+                  :x="bar.centerX"
+                  :y="CHART_HEIGHT - 6"
                   text-anchor="middle"
                   class="modern-usage-overview__tick"
                 >
-                  {{ dayLabel(bar.day) }}
+                  {{ xLabelFor(bar.day) }}
                 </text>
               </g>
             </svg>
@@ -355,23 +424,47 @@ function dayLabel(dayMS: number): string {
           <h3>{{ t('usageOverview.trendTitle') }}</h3>
           <div class="modern-usage-overview__scroll">
             <svg
-              :width="trend.width"
-              :height="trend.height + 18"
-              :viewBox="`0 0 ${trend.width} ${trend.height + 18}`"
+              :viewBox="`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`"
               role="img"
               :aria-label="t('usageOverview.trendTitle')"
             >
+              <g v-for="tick in yTicks" :key="'gy' + tick.y">
+                <line
+                  :x1="PLOT_LEFT" :x2="CHART_WIDTH - PLOT_RIGHT"
+                  :y1="tick.y" :y2="tick.y"
+                  stroke="currentColor" opacity="0.12"
+                />
+                <text :x="PLOT_LEFT - 8" :y="tick.y + 4" text-anchor="end" class="modern-usage-overview__tick">
+                  {{ tick.label }}
+                </text>
+              </g>
+              <line
+                :x1="PLOT_LEFT" :x2="CHART_WIDTH - PLOT_RIGHT"
+                :y1="PLOT_TOP + PLOT_HEIGHT" :y2="PLOT_TOP + PLOT_HEIGHT"
+                stroke="currentColor" opacity="0.3"
+              />
               <path :d="trend.path" fill="none" stroke="var(--modern-color-action, #3b82f6)" stroke-width="2" />
               <circle
                 v-for="point in trend.plotted"
                 :key="point.day"
                 :cx="point.x"
                 :cy="point.y"
-                r="2.5"
+                r="3"
                 fill="var(--modern-color-action, #3b82f6)"
               >
-                <title>{{ `${dayLabel(point.day)}: ${formatCompact(point.value)}` }}</title>
+                <title>{{ `${xLabelFor(point.day)}: ${formatCompact(point.value)}` }}</title>
               </circle>
+              <text
+                v-for="(point, index) in trend.plotted"
+                v-show="index % Math.ceil(trend.plotted.length / 12) === 0"
+                :key="'xl' + point.day"
+                :x="point.x"
+                :y="CHART_HEIGHT - 6"
+                text-anchor="middle"
+                class="modern-usage-overview__tick"
+              >
+                {{ xLabelFor(point.day) }}
+              </text>
             </svg>
           </div>
         </section>

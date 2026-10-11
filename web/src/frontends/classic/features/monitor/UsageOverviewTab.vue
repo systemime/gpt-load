@@ -12,7 +12,7 @@ import {
 } from '@/app/resources/usage-overview'
 import QueryFeedback from '@/components/ui/QueryFeedback.vue'
 import SkeletonSurface from '@/components/ui/SkeletonSurface.vue'
-import { formatInteger, formatLocalInstant } from '@/lib/format'
+import { formatInteger } from '@/lib/format'
 
 // 每人累计用量总览(阶段 4): 筛选(日期/分组/用户) + 饼图/堆叠柱/折线, 自绘 SVG 零依赖。
 
@@ -147,8 +147,48 @@ const donut = computed(() => {
 })
 
 // ---------- 堆叠柱: 按日按人 ----------
+const CHART_WIDTH = 1000
+const CHART_HEIGHT = 260
+const PLOT_LEFT = 56
+const PLOT_RIGHT = 16
+const PLOT_TOP = 12
+const PLOT_BOTTOM = 26
+const PLOT_WIDTH = CHART_WIDTH - PLOT_LEFT - PLOT_RIGHT
+const PLOT_HEIGHT = CHART_HEIGHT - PLOT_TOP - PLOT_BOTTOM
+
+const chartDays = computed(() => {
+  const days = new Set<number>()
+  for (const point of report.value?.series ?? []) days.add(point.day_ms)
+  return [...days].sort((left, right) => left - right)
+})
+
+const chartPeak = computed(() => {
+  const totals = new Map<number, number>()
+  for (const point of report.value?.series ?? []) {
+    totals.set(point.day_ms, (totals.get(point.day_ms) ?? 0) + (metric.value === 'requests' ? point.requests : point.tokens))
+  }
+  return Math.max(1, ...totals.values())
+})
+
+const yTicks = computed(() =>
+  [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+    const value = Math.round(chartPeak.value * ratio)
+    return { value, y: PLOT_TOP + PLOT_HEIGHT - ratio * PLOT_HEIGHT, label: formatCompact(value) }
+  }),
+)
+
+const xTickValues = computed(() => {
+  const days = chartDays.value
+  if (days.length === 0) return []
+  const step = Math.ceil(days.length / 12)
+  return days.filter((_, index) => index % step === 0)
+})
+
 const stackedBars = computed(() => {
   const series = report.value?.series ?? []
+  const days = chartDays.value
+  const slotWidth = days.length > 0 ? PLOT_WIDTH / days.length : PLOT_WIDTH
+  const barWidth = Math.min(48, Math.max(6, slotWidth * 0.62))
   const byDay = new Map<number, Map<number, number>>()
   for (const point of series) {
     const value = metric.value === 'requests' ? point.requests : point.tokens
@@ -157,53 +197,52 @@ const stackedBars = computed(() => {
     const day = byDay.get(point.day_ms)!
     day.set(point.access_key_id, (day.get(point.access_key_id) ?? 0) + value)
   }
-  const days = [...byDay.keys()].sort((left, right) => left - right)
-  const height = 180
-  const width = Math.max(days.length * 18, 120)
-  const dailyTotals = days.map((day) =>
-    [...byDay.get(day)!.values()].reduce((sum, value) => sum + value, 0),
-  )
-  const peak = Math.max(1, ...dailyTotals)
+  const peak = chartPeak.value
   const bars = days.map((day, index) => {
-    const total = dailyTotals[index]
+    const slotX = PLOT_LEFT + index * slotWidth
+    const barX = slotX + (slotWidth - barWidth) / 2
     let offset = 0
-    const parts = [...byDay.get(day)!.entries()]
+    const dayMap = byDay.get(day) ?? new Map<number, number>()
+    const parts = [...dayMap.entries()]
       .filter(([id]) => personID.value === 0 || id === personID.value)
       .map(([id, value]) => {
-        const partHeight = Math.round((value / peak) * height)
-        const top = height - offset - partHeight
+        const partHeight = Math.round((value / peak) * PLOT_HEIGHT)
+        const top = PLOT_TOP + PLOT_HEIGHT - offset - partHeight
         offset += partHeight
-        return { id, value, y: top, height: partHeight }
+        return { id, value, y: top, height: Math.max(partHeight, value > 0 ? 1 : 0) }
       })
-    return { day, x: index * 18 + 4, parts, total }
+    return { day, centerX: slotX + slotWidth / 2, barX, barWidth, parts }
   })
-  return { bars, width, height, peak, days: days.length }
+  return { bars }
 })
 
 // ---------- 折线: 每日总量 ----------
 const trendLine = computed(() => {
   const series = report.value?.series ?? []
+  const days = chartDays.value
   const byDay = new Map<number, number>()
   for (const point of series) {
     const value = metric.value === 'requests' ? point.requests : point.tokens
     byDay.set(point.day_ms, (byDay.get(point.day_ms) ?? 0) + value)
   }
-  const days = [...byDay.keys()].sort((left, right) => left - right)
-  const values = days.map((day) => byDay.get(day) ?? 0)
-  const peak = Math.max(1, ...values)
-  const height = 140
-  const width = Math.max(days.length * 18, 120)
+  const peak = chartPeak.value
+  const slotWidth = days.length > 0 ? PLOT_WIDTH / days.length : PLOT_WIDTH
   const points = days.map((day, index) => {
-    const x = index * 18 + 9
-    const y = height - Math.round((values[index] / peak) * (height - 8)) - 4
-    return { x, y, day, value: values[index] }
+    const value = byDay.get(day) ?? 0
+    return {
+      x: PLOT_LEFT + slotWidth * index + slotWidth / 2,
+      y: PLOT_TOP + PLOT_HEIGHT - Math.round((value / peak) * PLOT_HEIGHT),
+      day,
+      value,
+    }
   })
   const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
-  return { points, path, width, height, peak }
+  return { points, path }
 })
 
-function dayLabel(dayMS: number): string {
-  return formatLocalInstant(dayMS, locale.value, { month: 'numeric', day: 'numeric' })
+function xLabelFor(dayMS: number): string {
+  const date = new Date(dayMS)
+  return `${date.getMonth() + 1}/${date.getDate()}`
 }
 
 function refresh(): Promise<void> {
@@ -311,24 +350,43 @@ function refresh(): Promise<void> {
           <h3>{{ t('monitor.usageOverview.dailyTitle') }}</h3>
           <div class="usage-overview__chart-scroll">
             <svg
-              :width="stackedBars.width"
-              :height="stackedBars.height + 18"
-              :viewBox="`0 0 ${stackedBars.width} ${stackedBars.height + 18}`"
+              :viewBox="`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`"
               role="img"
               :aria-label="t('monitor.usageOverview.dailyTitle')"
             >
+              <g v-for="tick in yTicks" :key="'gy' + tick.y">
+                <line
+                  :x1="PLOT_LEFT" :x2="CHART_WIDTH - PLOT_RIGHT"
+                  :y1="tick.y" :y2="tick.y"
+                  stroke="currentColor" opacity="0.12"
+                />
+                <text :x="PLOT_LEFT - 8" :y="tick.y + 4" text-anchor="end" class="usage-overview__tick">
+                  {{ tick.label }}
+                </text>
+              </g>
+              <line
+                :x1="PLOT_LEFT" :x2="CHART_WIDTH - PLOT_RIGHT"
+                :y1="PLOT_TOP + PLOT_HEIGHT" :y2="PLOT_TOP + PLOT_HEIGHT"
+                stroke="currentColor" opacity="0.3"
+              />
               <g v-for="bar in stackedBars.bars" :key="bar.day">
                 <rect
-                  v-for="(part, partIndex) in bar.parts"
+                  v-for="part in bar.parts"
                   :key="part.id"
-                  :x="bar.x"
+                  :x="bar.barX"
                   :y="part.y"
-                  :width="12"
-                  :height="Math.max(part.height, part.value > 0 ? 1 : 0)"
-                  :fill="personColor.get(part.id) ?? PALETTE[partIndex % PALETTE.length]"
+                  :width="bar.barWidth"
+                  :height="part.height"
+                  :fill="personColor.get(part.id) ?? PALETTE[0]"
                 />
-                <text v-if="stackedBars.days <= 32" :x="bar.x + 6" :y="stackedBars.height + 14" text-anchor="middle" class="usage-overview__tick">
-                  {{ dayLabel(bar.day) }}
+                <text
+                  v-if="xTickValues.includes(bar.day)"
+                  :x="bar.centerX"
+                  :y="CHART_HEIGHT - 6"
+                  text-anchor="middle"
+                  class="usage-overview__tick"
+                >
+                  {{ xLabelFor(bar.day) }}
                 </text>
               </g>
             </svg>
@@ -340,16 +398,40 @@ function refresh(): Promise<void> {
           <h3>{{ t('monitor.usageOverview.trendTitle') }}</h3>
           <div class="usage-overview__chart-scroll">
             <svg
-              :width="trendLine.width"
-              :height="trendLine.height + 18"
-              :viewBox="`0 0 ${trendLine.width} ${trendLine.height + 18}`"
+              :viewBox="`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`"
               role="img"
               :aria-label="t('monitor.usageOverview.trendTitle')"
             >
+              <g v-for="tick in yTicks" :key="'gy' + tick.y">
+                <line
+                  :x1="PLOT_LEFT" :x2="CHART_WIDTH - PLOT_RIGHT"
+                  :y1="tick.y" :y2="tick.y"
+                  stroke="currentColor" opacity="0.12"
+                />
+                <text :x="PLOT_LEFT - 8" :y="tick.y + 4" text-anchor="end" class="usage-overview__tick">
+                  {{ tick.label }}
+                </text>
+              </g>
+              <line
+                :x1="PLOT_LEFT" :x2="CHART_WIDTH - PLOT_RIGHT"
+                :y1="PLOT_TOP + PLOT_HEIGHT" :y2="PLOT_TOP + PLOT_HEIGHT"
+                stroke="currentColor" opacity="0.3"
+              />
               <path :d="trendLine.path" fill="none" stroke="var(--color-action, #3b82f6)" stroke-width="2" />
-              <circle v-for="point in trendLine.points" :key="point.day" :cx="point.x" :cy="point.y" r="2.5" fill="var(--color-action, #3b82f6)">
-                <title>{{ `${dayLabel(point.day)}: ${formatCompact(point.value)}` }}</title>
+              <circle v-for="point in trendLine.points" :key="point.day" :cx="point.x" :cy="point.y" r="3" fill="var(--color-action, #3b82f6)">
+                <title>{{ `${xLabelFor(point.day)}: ${formatCompact(point.value)}` }}</title>
               </circle>
+              <text
+                v-for="(point, index) in trendLine.points"
+                v-show="index % Math.ceil(trendLine.points.length / 12) === 0"
+                :key="'xl' + point.day"
+                :x="point.x"
+                :y="CHART_HEIGHT - 6"
+                text-anchor="middle"
+                class="usage-overview__tick"
+              >
+                {{ xLabelFor(point.day) }}
+              </text>
             </svg>
           </div>
         </section>
@@ -515,7 +597,7 @@ function refresh(): Promise<void> {
 }
 
 .usage-overview__tick {
-  font-size: 9px;
+  font-size: 11px;
   fill: var(--color-text-muted);
 }
 
