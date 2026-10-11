@@ -23,6 +23,8 @@ export default {
     credentials: {
       windowLabel: 'Statistics window',
       table: 'Credential load distribution',
+      title: 'Credential load',
+      pressureHelp: 'Pressure = this key\'s actual usage share ÷ its weight target share\nActual share = this key\'s 5h consumption ÷ total 5h consumption across all keys\nWeight target share = this key\'s weight ÷ total weight across all keys',
       windows: { '1h': 'Last hour', '5h': 'Last 5 hours', '24h': 'Last 24 hours' },
       summary: '{count} credentials · per-credential cap {cap} · local rejects {rejects}',
       queued: '{count} queued',

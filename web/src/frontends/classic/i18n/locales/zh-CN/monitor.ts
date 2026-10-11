@@ -23,6 +23,8 @@ export default {
     credentials: {
       windowLabel: '统计窗口',
       table: '凭证负载分布',
+      title: '凭证负载',
+      pressureHelp: '压力 = 该 key 实际用量份额 ÷ 该 key 权重目标份额\n实际份额 = 该 key 5h 窗口消耗 ÷ 全部 key 5h 窗口消耗总和\n权重目标份额 = 该 key 权重 ÷ 全部 key 权重总和',
       windows: { '1h': '近 1 小时', '5h': '近 5 小时', '24h': '近 24 小时' },
       summary: '{count} 个凭证 · 每凭证并发上限 {cap} · 本地拒绝 {rejects}',
       queued: '排队 {count}',

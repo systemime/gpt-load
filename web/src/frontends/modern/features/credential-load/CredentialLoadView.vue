@@ -13,7 +13,7 @@ import {
 import { useApiClient } from '@shared/http/client-context'
 import { usePageRefresh } from '@modern/app/page-refresh'
 import { useMessageSource } from '@modern/app/messages'
-import { AppButton, AppCollectionState, AppSegmentedControl } from '@modern/components/ui'
+import { AppButton, AppCollectionState, AppSegmentedControl, AppTooltip } from '@modern/components/ui'
 
 const BAR_WIDTH = 10
 

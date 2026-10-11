@@ -11,6 +11,7 @@ import {
   type CredentialLoadItem,
   type CredentialLoadWindowKey,
 } from '@/app/resources/credential-load'
+import AppTooltip from '@/components/ui/AppTooltip.vue'
 import QueryFeedback from '@/components/ui/QueryFeedback.vue'
 import SegmentedControl, { type SegmentedControlOption } from '@/components/ui/SegmentedControl.vue'
 import SkeletonSurface from '@/components/ui/SkeletonSurface.vue'
@@ -115,6 +116,12 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
 
 <template>
   <div class="credential-load">
+    <div class="credential-load__hint">
+      <span class="credential-load__hint-title">{{ t('monitor.credentials.title') }}</span>
+      <AppTooltip :content="t('monitor.credentials.pressureHelp')">
+        <span class="credential-load__help-icon" aria-label="压力计算说明">?</span>
+      </AppTooltip>
+    </div>
     <QueryFeedback
       v-if="initialLoading || (query.isError.value && report === undefined)"
       :state="initialLoading ? 'loading' : 'error'"
@@ -246,6 +253,31 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
 .credential-load {
   display: grid;
   gap: var(--space-4);
+}
+
+.credential-load__hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.credential-load__hint-title {
+  font-size: var(--title-section);
+  font-weight: 650;
+}
+
+.credential-load__help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border-subtle);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  cursor: help;
+  user-select: none;
 }
 
 .credential-load__skeleton {
