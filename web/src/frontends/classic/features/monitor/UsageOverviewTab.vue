@@ -311,8 +311,9 @@ function refresh(): Promise<void> {
           <h3>{{ t('monitor.usageOverview.dailyTitle') }}</h3>
           <div class="usage-overview__chart-scroll">
             <svg
+              :width="stackedBars.width"
+              :height="stackedBars.height + 18"
               :viewBox="`0 0 ${stackedBars.width} ${stackedBars.height + 18}`"
-              preserveAspectRatio="xMinYMin meet"
               role="img"
               :aria-label="t('monitor.usageOverview.dailyTitle')"
             >
@@ -339,8 +340,9 @@ function refresh(): Promise<void> {
           <h3>{{ t('monitor.usageOverview.trendTitle') }}</h3>
           <div class="usage-overview__chart-scroll">
             <svg
+              :width="trendLine.width"
+              :height="trendLine.height + 18"
               :viewBox="`0 0 ${trendLine.width} ${trendLine.height + 18}`"
-              preserveAspectRatio="xMinYMin meet"
               role="img"
               :aria-label="t('monitor.usageOverview.trendTitle')"
             >
@@ -509,10 +511,7 @@ function refresh(): Promise<void> {
 }
 
 .usage-overview__chart-scroll svg {
-  width: 100%;
-  min-width: 320px;
-  max-width: 1200px;
-  height: auto;
+  display: block;
 }
 
 .usage-overview__tick {

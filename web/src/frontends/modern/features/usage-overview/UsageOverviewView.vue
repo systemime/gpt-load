@@ -321,8 +321,9 @@ function dayLabel(dayMS: number): string {
           <h3>{{ t('usageOverview.dailyTitle') }}</h3>
           <div class="modern-usage-overview__scroll">
             <svg
+              :width="stacked.width"
+              :height="CHART_HEIGHT + 18"
               :viewBox="`0 0 ${stacked.width} ${CHART_HEIGHT + 18}`"
-              preserveAspectRatio="xMinYMin meet"
               role="img"
               :aria-label="t('usageOverview.dailyTitle')"
             >
@@ -354,8 +355,9 @@ function dayLabel(dayMS: number): string {
           <h3>{{ t('usageOverview.trendTitle') }}</h3>
           <div class="modern-usage-overview__scroll">
             <svg
+              :width="trend.width"
+              :height="trend.height + 18"
               :viewBox="`0 0 ${trend.width} ${trend.height + 18}`"
-              preserveAspectRatio="xMinYMin meet"
               role="img"
               :aria-label="t('usageOverview.trendTitle')"
             >
@@ -484,10 +486,7 @@ function dayLabel(dayMS: number): string {
 }
 
 .modern-usage-overview__scroll svg {
-  width: 100%;
-  min-width: 320px;
-  max-width: 1200px;
-  height: auto;
+  display: block;
 }
 
 .modern-usage-overview__tick {
