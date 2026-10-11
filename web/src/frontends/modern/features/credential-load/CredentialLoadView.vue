@@ -233,17 +233,19 @@ function formatTokens(value: number): string {
         <p v-else class="modern-credential-load__empty">{{ t('credentialLoad.noErrors') }}</p>
       </section>
 
-      <section class="modern-usage-overview__card">
-        <h3>DEBUG: accessKeys={{ JSON.stringify(report.accessKeys?.length ?? 'undefined') }} | hasField={{ !!report.accessKeys }}</h3>
-        <h3 v-if="report.accessKeys && report.accessKeys.length > 0">{{ t('credentialLoad.accessKeyTitle') }}</h3>
-        <div class="modern-credential-load__table" role="table">
+      <section v-if="report.accessKeys.length > 0" class="modern-credential-load__section">
+        <h3>{{ t('credentialLoad.accessKeyTitle') }}</h3>
+        <div class="modern-credential-load__table modern-credential-load__table--keys" role="table">
           <div class="modern-credential-load__row modern-credential-load__row--head" role="row">
             <span role="columnheader">{{ t('credentialLoad.person') }}</span>
-            <span role="columnheader">{{ t('credentialLoad.requests') }}</span>
-            <span role="columnheader">{{ t('credentialLoad.success') }}</span>
-            <span role="columnheader">{{ t('credentialLoad.affinity') }}</span>
-            <span role="columnheader">{{ t('credentialLoad.tokens') }}</span>
-            <span role="columnheader">{{ t('credentialLoad.cacheRead') }}</span>
+            <span
+              v-for="column in (['requests','success','affinity','tokens','cacheRead'] as const)"
+              :key="column"
+              role="columnheader"
+              class="modern-credential-load__num"
+            >
+              {{ t(`credentialLoad.${column}`) }}
+            </span>
           </div>
           <div v-for="item in report.accessKeys" :key="item.id" class="modern-credential-load__row" role="row">
             <span role="cell" class="modern-credential-load__name">{{ item.name || `#${item.id}` }}</span>
@@ -256,15 +258,19 @@ function formatTokens(value: number): string {
         </div>
       </section>
 
-      <section v-if="report.groups && report.groups.length > 0" class="modern-usage-overview__card">
+      <section v-if="report.groups.length > 0" class="modern-credential-load__section">
         <h3>{{ t('credentialLoad.groupTitle') }}</h3>
-        <div class="modern-credential-load__table" role="table">
+        <div class="modern-credential-load__table modern-credential-load__table--groups" role="table">
           <div class="modern-credential-load__row modern-credential-load__row--head" role="row">
             <span role="columnheader">{{ t('credentialLoad.group') }}</span>
-            <span role="columnheader">{{ t('credentialLoad.requests') }}</span>
-            <span role="columnheader">{{ t('credentialLoad.success') }}</span>
-            <span role="columnheader">{{ t('credentialLoad.tokens') }}</span>
-            <span role="columnheader">{{ t('credentialLoad.cacheRead') }}</span>
+            <span
+              v-for="column in (['requests','success','tokens','cacheRead'] as const)"
+              :key="column"
+              role="columnheader"
+              class="modern-credential-load__num"
+            >
+              {{ t(`credentialLoad.${column}`) }}
+            </span>
           </div>
           <div v-for="item in report.groups" :key="item.id" class="modern-credential-load__row" role="row">
             <span role="cell" class="modern-credential-load__name">{{ item.name || `#${item.id}` }}</span>
@@ -380,5 +386,24 @@ function formatTokens(value: number): string {
   margin: 0;
   font-size: 1rem;
   font-weight: 650;
+}
+
+.modern-credential-load__section {
+  display: grid;
+  gap: 8px;
+}
+
+.modern-credential-load__section h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.modern-credential-load__table--keys .modern-credential-load__row {
+  grid-template-columns: minmax(96px, 1.4fr) repeat(5, minmax(56px, 1fr));
+}
+
+.modern-credential-load__table--groups .modern-credential-load__row {
+  grid-template-columns: minmax(96px, 1.4fr) repeat(4, minmax(56px, 1fr));
 }
 </style>
