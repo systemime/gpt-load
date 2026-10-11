@@ -233,8 +233,9 @@ function formatTokens(value: number): string {
         <p v-else class="modern-credential-load__empty">{{ t('credentialLoad.noErrors') }}</p>
       </section>
 
-      <section v-if="report.accessKeys && report.accessKeys.length > 0" class="modern-usage-overview__card">
-        <h3>{{ t('credentialLoad.accessKeyTitle') }}</h3>
+      <section class="modern-usage-overview__card">
+        <h3>DEBUG: accessKeys={{ JSON.stringify(report.accessKeys?.length ?? 'undefined') }} | hasField={{ !!report.accessKeys }}</h3>
+        <h3 v-if="report.accessKeys && report.accessKeys.length > 0">{{ t('credentialLoad.accessKeyTitle') }}</h3>
         <div class="modern-credential-load__table" role="table">
           <div class="modern-credential-load__row modern-credential-load__row--head" role="row">
             <span role="columnheader">{{ t('credentialLoad.person') }}</span>
@@ -274,6 +275,7 @@ function formatTokens(value: number): string {
           </div>
         </div>
       </section>
+    </template>
   </div>
 </template>
 
