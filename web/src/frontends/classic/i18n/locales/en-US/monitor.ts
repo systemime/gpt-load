@@ -73,6 +73,8 @@ export default {
         person: 'Person',
         allPeople: 'Everyone',
       },
+      metric: 'Metric',
+      timeRange: 'Time range',
       metrics: { requests: 'Requests', tokens: 'Tokens' },
       columns: {
         person: 'Person',

@@ -73,6 +73,8 @@ export default {
         person: '用户',
         allPeople: '全部用户',
       },
+      metric: '指标',
+      timeRange: '时间范围',
       metrics: { requests: '请求数', tokens: 'Token' },
       columns: {
         person: '用户',

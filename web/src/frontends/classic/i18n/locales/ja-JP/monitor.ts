@@ -73,6 +73,8 @@ export default {
         person: 'ユーザー',
         allPeople: '全ユーザー',
       },
+      metric: '指標',
+      timeRange: '期間',
       metrics: { requests: 'リクエスト', tokens: 'トークン' },
       columns: {
         person: 'ユーザー',
