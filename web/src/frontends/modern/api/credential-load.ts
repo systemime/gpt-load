@@ -108,6 +108,31 @@ function readItem(value: unknown): CredentialLoadItem {
   }
 }
 
+function parseDimensions(value: unknown): CredentialLoadDimension[] {
+  try {
+    if (!Array.isArray(value)) return []
+    return value.map((item) => {
+      const row = record(item)
+      const windows = record(row.windows ?? {})
+      return {
+        id: integer(row.id, 1),
+        name: text(row.name),
+        windows: Object.fromEntries(
+          credentialLoadWindowKeys.map((key) => {
+            try {
+              return [key, readWindow(windows[key] ?? {})]
+            } catch {
+              return [key, { requests: 0, success: 0, affinityHits: 0, uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 0 }]
+            }
+          }),
+        ) as Record<CredentialLoadWindowKey, CredentialLoadWindow>,
+      }
+    })
+  } catch {
+    return []
+  }
+}
+
 export function readCredentialLoad(value: unknown): CredentialLoadReport {
   const row = record(value)
   const rejects = record(row.local_rejects)
@@ -118,28 +143,8 @@ export function readCredentialLoad(value: unknown): CredentialLoadReport {
     localRejects: Object.fromEntries(
       credentialLoadWindowKeys.map((key) => [key, integer(rejects[key])]),
     ) as Record<CredentialLoadWindowKey, number>,
-    accessKeys: list(row.access_keys ?? []).map((item) => {
-      const dim = record(item)
-      const dimWindows = record(dim.windows)
-      return {
-        id: integer(dim.id, 1),
-        name: text(dim.name),
-        windows: Object.fromEntries(
-          credentialLoadWindowKeys.map((key) => [key, readWindow(dimWindows[key])]),
-        ) as Record<CredentialLoadWindowKey, CredentialLoadWindow>,
-      }
-    }),
-    groups: list(row.groups ?? []).map((item) => {
-      const dim = record(item)
-      const dimWindows = record(dim.windows)
-      return {
-        id: integer(dim.id, 1),
-        name: text(dim.name),
-        windows: Object.fromEntries(
-          credentialLoadWindowKeys.map((key) => [key, readWindow(dimWindows[key])]),
-        ) as Record<CredentialLoadWindowKey, CredentialLoadWindow>,
-      }
-    }),
+    accessKeys: parseDimensions(row.access_keys),
+    groups: parseDimensions(row.groups),
   }
 }
 
