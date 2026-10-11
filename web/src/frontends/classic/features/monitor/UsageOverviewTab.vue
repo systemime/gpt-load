@@ -378,7 +378,13 @@ function refresh(): Promise<void> {
                   :width="bar.barWidth"
                   :height="part.height"
                   :fill="personColor.get(part.id) ?? PALETTE[0]"
-                />
+                >
+                  <title>
+                    {{
+                      `${personNames.get(part.id) ?? ''} · ${xLabelFor(bar.day)} · ${formatCompact(part.value)}`
+                    }}
+                  </title>
+                </rect>
                 <text
                   v-if="xTickValues.includes(bar.day)"
                   :x="bar.centerX"
@@ -419,6 +425,16 @@ function refresh(): Promise<void> {
               />
               <path :d="trendLine.path" fill="none" stroke="var(--color-action, #3b82f6)" stroke-width="2" />
               <circle v-for="point in trendLine.points" :key="point.day" :cx="point.x" :cy="point.y" r="3" fill="var(--color-action, #3b82f6)">
+                <title>{{ `${xLabelFor(point.day)}: ${formatCompact(point.value)}` }}</title>
+              </circle>
+              <circle
+                v-for="point in trendLine.points"
+                :key="'hit' + point.day"
+                :cx="point.x"
+                :cy="point.y"
+                r="10"
+                fill="transparent"
+              >
                 <title>{{ `${xLabelFor(point.day)}: ${formatCompact(point.value)}` }}</title>
               </circle>
               <text
@@ -541,6 +557,7 @@ function refresh(): Promise<void> {
 .usage-overview__donut {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: var(--space-4);
 }

@@ -408,7 +408,13 @@ const trend = computed(() => {
                   :width="bar.barWidth"
                   :height="part.height"
                   :fill="personColor.get(part.id) ?? PALETTE[0]"
-                />
+                >
+                  <title>
+                    {{
+                      `${personNames.get(part.id) ?? ''} · ${xLabelFor(bar.day)} · ${formatCompact(part.value)}`
+                    }}
+                  </title>
+                </rect>
                 <text
                   v-if="xTickValues.includes(bar.day)"
                   :x="bar.centerX"
@@ -454,6 +460,16 @@ const trend = computed(() => {
                 :cy="point.y"
                 r="3"
                 fill="var(--modern-color-action, #3b82f6)"
+              >
+                <title>{{ `${xLabelFor(point.day)}: ${formatCompact(point.value)}` }}</title>
+              </circle>
+              <circle
+                v-for="point in trend.plotted"
+                :key="'hit' + point.day"
+                :cx="point.x"
+                :cy="point.y"
+                r="10"
+                fill="transparent"
               >
                 <title>{{ `${xLabelFor(point.day)}: ${formatCompact(point.value)}` }}</title>
               </circle>
@@ -546,6 +562,7 @@ const trend = computed(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 16px;
 }
 
@@ -601,7 +618,7 @@ const trend = computed(() => {
 
 .modern-usage-overview__tick {
   font-size: 9px;
-  fill: var(--modern-color-text-muted, inherit);
+  fill: var(--modern-muted);
 }
 
 .modern-usage-overview__empty {
@@ -632,5 +649,10 @@ const trend = computed(() => {
 .modern-usage-overview__row--head {
   color: var(--modern-color-text-muted, inherit);
   font-weight: 600;
+}
+
+/* 数值列单元格右对齐, 表头同步右对齐, 否则宽列下表头在左、数值在右, 看起来像空列 */
+.modern-usage-overview__row--head span:not(:first-child) {
+  text-align: right;
 }
 </style>
