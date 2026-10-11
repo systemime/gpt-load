@@ -212,6 +212,80 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
         </p>
       </div>
 
+      <section class="usage-overview__card" v-if="report.access_keys && report.access_keys.length > 0">
+        <h3>{{ t('monitor.credentials.accessKeyTitle') }}</h3>
+        <div class="credential-load__table" role="table">
+          <div class="credential-load__row credential-load__row--head" role="row">
+            <span role="columnheader">{{ t('monitor.credentials.columns.person') }}</span>
+            <span role="columnheader">{{ t('monitor.credentials.columns.requests') }}</span>
+            <span role="columnheader">{{ t('monitor.credentials.columns.successRate') }}</span>
+            <span role="columnheader">{{ t('monitor.credentials.columns.affinity') }}</span>
+            <span role="columnheader">{{ t('monitor.credentials.columns.tokens') }}</span>
+            <span role="columnheader">{{ t('monitor.credentials.columns.cacheRead') }}</span>
+          </div>
+          <div
+            v-for="item in report.access_keys"
+            :key="item.id"
+            class="credential-load__row"
+            role="row"
+          >
+            <span role="cell" class="credential-load__name">
+              {{ item.name || `#${item.id}` }}
+            </span>
+            <span role="cell" class="credential-load__number">
+              {{ formatInteger(item.windows[activeWindow].requests, locale) }}
+            </span>
+            <span role="cell" class="credential-load__number">
+              {{ formatInteger(item.windows[activeWindow].success, locale) }}
+            </span>
+            <span role="cell" class="credential-load__number">
+              {{ formatInteger(item.windows[activeWindow].affinity_hits, locale) }}
+            </span>
+            <span role="cell" class="credential-load__number">
+              {{ formatTokens(item.windows[activeWindow].uncached_input_tokens + item.windows[activeWindow].output_tokens) }}
+            </span>
+            <span role="cell" class="credential-load__number">
+              {{ formatTokens(item.windows[activeWindow].cache_read_tokens) }}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section class="usage-overview__card" v-if="report.groups && report.groups.length > 0">
+        <h3>{{ t('monitor.credentials.groupTitle') }}</h3>
+        <div class="credential-load__table" role="table">
+          <div class="credential-load__row credential-load__row--head" role="row">
+            <span role="columnheader">{{ t('monitor.credentials.columns.group') }}</span>
+            <span role="columnheader">{{ t('monitor.credentials.columns.requests') }}</span>
+            <span role="columnheader">{{ t('monitor.credentials.columns.successRate') }}</span>
+            <span role="columnheader">{{ t('monitor.credentials.columns.tokens') }}</span>
+            <span role="columnheader">{{ t('monitor.credentials.columns.cacheRead') }}</span>
+          </div>
+          <div
+            v-for="item in report.groups"
+            :key="item.id"
+            class="credential-load__row"
+            role="row"
+          >
+            <span role="cell" class="credential-load__name">
+              {{ item.name || `#${item.id}` }}
+            </span>
+            <span role="cell" class="credential-load__number">
+              {{ formatInteger(item.windows[activeWindow].requests, locale) }}
+            </span>
+            <span role="cell" class="credential-load__number">
+              {{ formatInteger(item.windows[activeWindow].success, locale) }}
+            </span>
+            <span role="cell" class="credential-load__number">
+              {{ formatTokens(item.windows[activeWindow].uncached_input_tokens + item.windows[activeWindow].output_tokens) }}
+            </span>
+            <span role="cell" class="credential-load__number">
+              {{ formatTokens(item.windows[activeWindow].cache_read_tokens) }}
+            </span>
+          </div>
+        </div>
+      </section>
+
       <section class="credential-load__errors" :aria-label="t('monitor.credentials.errorsTitle')">
         <h3>{{ t('monitor.credentials.errorsTitle') }}</h3>
         <div

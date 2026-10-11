@@ -22,6 +22,10 @@ func seedCredentialLoadRows(t *testing.T, fixture serviceFixture) {
 	if err := fixture.db.Create(&group).Error; err != nil {
 		t.Fatalf("Create group error = %v", err)
 	}
+	accessKey := models.AccessKey{ID: 7, Name: "user-alice", KeyValue: "sk-gl-test", KeyHash: "hash-alice", KeySuffix: "test"}
+	if err := fixture.db.Create(&accessKey).Error; err != nil {
+		t.Fatalf("Create access key error = %v", err)
+	}
 	credentials := []models.Credential{
 		{ID: 1, GroupID: 1, Name: "alpha", Data: "cipher", Fingerprint: "fp-1", IdentityFingerprint: "fp-1"},
 		{ID: 2, GroupID: 1, Name: "", Data: "cipher", Fingerprint: "fp-2", IdentityFingerprint: "fp-2"},
@@ -33,7 +37,7 @@ func seedCredentialLoadRows(t *testing.T, fixture serviceFixture) {
 	}
 	logs := []models.RequestLog{
 		// 1h 内: 凭证 1 成功 + 亲和命中 + token
-		{ID: "req-1", CredentialID: 1, GroupID: 1, CompletedAtMS: now - 60_000, Status: "success",
+		{ID: "req-1", CredentialID: 1, GroupID: 1, AccessKeyID: 7, CompletedAtMS: now - 60_000, Status: "success",
 			AffinityHit: true, UncachedInputTokens: 100, OutputTokens: 20, CacheReadTokens: 900},
 		// 5h 内 1h 外: 凭证 2 限流错误
 		{ID: "req-2", CredentialID: 2, GroupID: 1, CompletedAtMS: now - 2*3_600_000, Status: "error",
@@ -129,5 +133,28 @@ func TestCredentialLoadEndpointAggregatesWindowsErrorsAndInflight(t *testing.T) 
 	}
 	if second.Name != "" {
 		t.Fatalf("credential 2 name = %q, want empty (falls back to id in UI)", second.Name)
+	}
+	if len(result.AccessKeys) != 1 {
+		t.Fatalf("access keys length = %d, want 1", len(result.AccessKeys))
+	}
+	key := result.AccessKeys[0]
+	if key.AccessKeyID != 7 || key.Name != "user-alice" {
+		t.Fatalf("access key item = %#v, want id 7 name user-alice", key)
+	}
+	if key.Windows["1h"].Requests != 1 || key.Windows["1h"].Success != 1 || key.Windows["1h"].AffinityHits != 1 {
+		t.Fatalf("access key 7 1h window = %#v", key.Windows["1h"])
+	}
+	if key.Windows["5h"].Requests != 1 || key.Windows["24h"].Requests != 1 {
+		t.Fatalf("access key 7 5h/24h windows = %#v", key.Windows)
+	}
+	if len(result.Groups) != 1 {
+		t.Fatalf("groups length = %d, want 1", len(result.Groups))
+	}
+	groupItem := result.Groups[0]
+	if groupItem.GroupID != 1 || groupItem.Name != "load-test-group" {
+		t.Fatalf("group item = %#v, want id 1 name load-test-group", groupItem)
+	}
+	if groupItem.Windows["1h"].Requests != 1 || groupItem.Windows["24h"].Requests != 3 {
+		t.Fatalf("group 1 windows = %#v", groupItem.Windows)
 	}
 }

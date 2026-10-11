@@ -47,11 +47,19 @@ export interface CredentialLoadItem {
   errors_5h: CredentialLoadErrors
 }
 
+export interface CredentialLoadDimension {
+  id: number
+  name: string
+  windows: Record<CredentialLoadWindowKey, CredentialLoadWindow>
+}
+
 export interface CredentialLoadReport {
   observed_at_ms: number
   cap: number
   credentials: CredentialLoadItem[]
   local_rejects: Record<CredentialLoadWindowKey, number>
+  access_keys: CredentialLoadDimension[]
+  groups: CredentialLoadDimension[]
 }
 
 const windowFields = [
@@ -72,7 +80,7 @@ const errorFields = [
   'other',
 ] as const
 const itemFields = ['id', 'name', 'status', 'inflight', 'queued', 'usage', 'pressure', 'windows', 'errors_5h'] as const
-const reportFields = ['observed_at_ms', 'cap', 'credentials', 'local_rejects'] as const
+const reportFields = ['observed_at_ms', 'cap', 'credentials', 'local_rejects', 'access_keys', 'groups'] as const
 
 function invalidResponse(): never {
   throw new InvalidResponseError()
@@ -150,11 +158,31 @@ export function projectCredentialLoad(value: unknown): CredentialLoadReport {
   for (const key of credentialLoadWindowKeys) {
     mapped[key] = projectCount(rejects[key])
   }
+  const readDimension = (value: unknown): CredentialLoadDimension => {
+    const row = projectRecord(value)
+    return {
+      id: projectSafeInteger(row.id, { minimum: 1 }),
+      name: projectString(row.name, { allowEmpty: true }),
+      windows: (() => {
+        const windows = projectRecord(row.windows)
+        const mapped = {} as Record<CredentialLoadWindowKey, CredentialLoadWindow>
+        for (const key of credentialLoadWindowKeys) {
+          if (windows[key] === undefined) invalidResponse()
+          mapped[key] = projectWindow(windows[key])
+        }
+        return mapped
+      })(),
+    }
+  }
+  const accessKeys = projectArray(record.access_keys, readDimension)
+  const groups = projectArray(record.groups, readDimension)
   return {
     observed_at_ms: projectSafeInteger(record.observed_at_ms, { minimum: 0 }),
     cap: projectSafeInteger(record.cap, { minimum: 0 }),
     credentials: projectArray(record.credentials, projectItem),
     local_rejects: mapped,
+    access_keys: accessKeys,
+    groups: groups,
   }
 }
 

@@ -24,6 +24,8 @@ export default {
       windowLabel: '集計ウィンドウ',
       table: '認証情報の負荷分布',
       title: '認証情報負荷',
+      accessKeyTitle: 'ユーザートラフィック（アクセスキー別）',
+      groupTitle: 'グループサマリー',
       pressureHelp: '圧力 = 該当キーの実際使用シェア ÷ 重み目標シェア\n実際シェア = 該当キーの 5h 消費 ÷ 全キー 5h 消費合計\n重み目標シェア = 該当キーの重み ÷ 全キー重み合計',
       windows: { '1h': '直近 1 時間', '5h': '直近 5 時間', '24h': '直近 24 時間' },
       summary: '{count} 件の認証情報 · 同時実行上限 {cap} · ローカル拒否 {rejects}',
