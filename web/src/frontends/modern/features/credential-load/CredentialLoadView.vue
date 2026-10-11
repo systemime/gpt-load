@@ -42,6 +42,13 @@ function refreshReport(): Promise<void> {
 }
 
 const activeWindow = ref<CredentialLoadWindowKey>('1h')
+
+function formatCompact(value: number): string {
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}G`
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
+  return String(value)
+}
 const windowOptions = computed(() =>
   credentialLoadWindowKeys.map((key) => ({
     value: key,
@@ -225,7 +232,48 @@ function formatTokens(value: number): string {
         </div>
         <p v-else class="modern-credential-load__empty">{{ t('credentialLoad.noErrors') }}</p>
       </section>
-    </template>
+
+      <section v-if="report.accessKeys && report.accessKeys.length > 0" class="modern-usage-overview__card">
+        <h3>{{ t('credentialLoad.accessKeyTitle') }}</h3>
+        <div class="modern-credential-load__table" role="table">
+          <div class="modern-credential-load__row modern-credential-load__row--head" role="row">
+            <span role="columnheader">{{ t('credentialLoad.person') }}</span>
+            <span role="columnheader">{{ t('credentialLoad.requests') }}</span>
+            <span role="columnheader">{{ t('credentialLoad.success') }}</span>
+            <span role="columnheader">{{ t('credentialLoad.affinity') }}</span>
+            <span role="columnheader">{{ t('credentialLoad.tokens') }}</span>
+            <span role="columnheader">{{ t('credentialLoad.cacheRead') }}</span>
+          </div>
+          <div v-for="item in report.accessKeys" :key="item.id" class="modern-credential-load__row" role="row">
+            <span role="cell" class="modern-credential-load__name">{{ item.name || `#${item.id}` }}</span>
+            <span role="cell" class="modern-credential-load__num">{{ formatCompact(item.windows[activeWindow].requests) }}</span>
+            <span role="cell" class="modern-credential-load__num">{{ formatCompact(item.windows[activeWindow].success) }}</span>
+            <span role="cell" class="modern-credential-load__num">{{ formatCompact(item.windows[activeWindow].affinityHits) }}</span>
+            <span role="cell" class="modern-credential-load__num">{{ formatCompact(item.windows[activeWindow].uncachedInputTokens + item.windows[activeWindow].outputTokens) }}</span>
+            <span role="cell" class="modern-credential-load__num">{{ formatCompact(item.windows[activeWindow].cacheReadTokens) }}</span>
+          </div>
+        </div>
+      </section>
+
+      <section v-if="report.groups && report.groups.length > 0" class="modern-usage-overview__card">
+        <h3>{{ t('credentialLoad.groupTitle') }}</h3>
+        <div class="modern-credential-load__table" role="table">
+          <div class="modern-credential-load__row modern-credential-load__row--head" role="row">
+            <span role="columnheader">{{ t('credentialLoad.group') }}</span>
+            <span role="columnheader">{{ t('credentialLoad.requests') }}</span>
+            <span role="columnheader">{{ t('credentialLoad.success') }}</span>
+            <span role="columnheader">{{ t('credentialLoad.tokens') }}</span>
+            <span role="columnheader">{{ t('credentialLoad.cacheRead') }}</span>
+          </div>
+          <div v-for="item in report.groups" :key="item.id" class="modern-credential-load__row" role="row">
+            <span role="cell" class="modern-credential-load__name">{{ item.name || `#${item.id}` }}</span>
+            <span role="cell" class="modern-credential-load__num">{{ formatCompact(item.windows[activeWindow].requests) }}</span>
+            <span role="cell" class="modern-credential-load__num">{{ formatCompact(item.windows[activeWindow].success) }}</span>
+            <span role="cell" class="modern-credential-load__num">{{ formatCompact(item.windows[activeWindow].uncachedInputTokens + item.windows[activeWindow].outputTokens) }}</span>
+            <span role="cell" class="modern-credential-load__num">{{ formatCompact(item.windows[activeWindow].cacheReadTokens) }}</span>
+          </div>
+        </div>
+      </section>
   </div>
 </template>
 

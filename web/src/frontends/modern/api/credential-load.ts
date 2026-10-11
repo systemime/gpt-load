@@ -42,11 +42,19 @@ export interface CredentialLoadItem {
   errors5h: CredentialLoadErrors
 }
 
+export interface CredentialLoadDimension {
+  id: number
+  name: string
+  windows: Record<CredentialLoadWindowKey, CredentialLoadWindow>
+}
+
 export interface CredentialLoadReport {
   observedAt: number
   cap: number
   credentials: CredentialLoadItem[]
   localRejects: Record<CredentialLoadWindowKey, number>
+  accessKeys: CredentialLoadDimension[]
+  groups: CredentialLoadDimension[]
 }
 
 function readWindow(value: unknown): CredentialLoadWindow {
@@ -110,6 +118,28 @@ export function readCredentialLoad(value: unknown): CredentialLoadReport {
     localRejects: Object.fromEntries(
       credentialLoadWindowKeys.map((key) => [key, integer(rejects[key])]),
     ) as Record<CredentialLoadWindowKey, number>,
+    accessKeys: list(row.access_keys ?? []).map((item) => {
+      const dim = record(item)
+      const dimWindows = record(dim.windows)
+      return {
+        id: integer(dim.id, 1),
+        name: text(dim.name),
+        windows: Object.fromEntries(
+          credentialLoadWindowKeys.map((key) => [key, readWindow(dimWindows[key])]),
+        ) as Record<CredentialLoadWindowKey, CredentialLoadWindow>,
+      }
+    }),
+    groups: list(row.groups ?? []).map((item) => {
+      const dim = record(item)
+      const dimWindows = record(dim.windows)
+      return {
+        id: integer(dim.id, 1),
+        name: text(dim.name),
+        windows: Object.fromEntries(
+          credentialLoadWindowKeys.map((key) => [key, readWindow(dimWindows[key])]),
+        ) as Record<CredentialLoadWindowKey, CredentialLoadWindow>,
+      }
+    }),
   }
 }
 
