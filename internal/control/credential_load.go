@@ -51,14 +51,15 @@ type credentialLoadUsage struct {
 	Tokens7d   int64 `json:"tokens_7d"`
 }
 
+// 两个维度的序列化形状统一为 id/name/windows, 与前端 CredentialLoadDimension 解析一致。
 type credentialLoadAccessKeyItem struct {
-	AccessKeyID uint                                 `json:"access_key_id"`
+	AccessKeyID uint                                 `json:"id"`
 	Name        string                               `json:"name"`
 	Windows     map[string]credentialLoadWindowStats `json:"windows"`
 }
 
 type credentialLoadGroupItem struct {
-	GroupID uint                                 `json:"group_id"`
+	GroupID uint                                 `json:"id"`
 	Name    string                               `json:"name"`
 	Windows map[string]credentialLoadWindowStats `json:"windows"`
 }
