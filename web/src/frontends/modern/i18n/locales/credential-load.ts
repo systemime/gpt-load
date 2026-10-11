@@ -33,7 +33,7 @@ export const zhCN = {
   requests: '请求数',
   success: '成功数',
   affinity: '亲和命中',
-  tokens: '消耗 tok',
+  tokens: '消耗 Token',
   cacheRead: '缓存读',
   windows: { '1h': '近 1 小时', '5h': '近 5 小时', '24h': '近 24 小时' },
   columns: {
@@ -44,7 +44,7 @@ export const zhCN = {
     share: '份额',
     successRate: '成功率',
     affinity: '亲和命中',
-    tokens: '消耗 tok',
+    tokens: '消耗 Token',
     cacheRead: '缓存读',
     pressure: '压力',
     queued: '排队',

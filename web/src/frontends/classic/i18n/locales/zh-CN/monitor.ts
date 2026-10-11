@@ -61,7 +61,7 @@ export default {
         share: '份额',
         successRate: '成功率',
         affinity: '亲和命中',
-        tokens: '消耗 tok',
+        tokens: '消耗 Token',
         pressure: '压力',
         cacheRead: '缓存读',
         person: '用户',
