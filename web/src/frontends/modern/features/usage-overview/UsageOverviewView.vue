@@ -288,52 +288,42 @@ const trend = computed(() => {
 <template>
   <div class="modern-usage-overview">
     <header class="modern-usage-overview__filters">
-      <label class="modern-usage-overview__field">
-        <span class="modern-usage-overview__field-label">{{ t('usageOverview.timeRange') }}</span>
-        <AppDateTimeRangePicker
-          v-model:from="from"
-          v-model:to="to"
-          :preset="preset"
-          :label="t('usageOverview.timeRange')"
-          size="md"
-          label-hidden
-          @update:preset="applyPreset"
-          @apply="applyCustom"
-        />
-      </label>
-      <label class="modern-usage-overview__field">
-        <span class="modern-usage-overview__field-label">{{ t('usageOverview.group') }}</span>
-        <AppSelect
-          :model-value="groupID ? String(groupID) : ''"
-          :options="[
-            { value: '', label: t('usageOverview.allGroups') },
-            ...(groupsQuery.data.value ?? []).map((group) => ({
-              value: String(group.id),
-              label: group.name,
-            })),
-          ]"
-          :label="t('usageOverview.group')"
-          size="md"
-          @update:model-value="groupID = Number($event) || 0"
-        />
-      </label>
-      <label class="modern-usage-overview__field">
-        <span class="modern-usage-overview__field-label">{{ t('usageOverview.person') }}</span>
-        <AppSelect
-          :model-value="personID ? String(personID) : ''"
-          :options="[
-            { value: '', label: t('usageOverview.allPeople') },
-            ...people.map((person) => ({
-              value: String(person.id),
-              label: personNames.get(person.id) ?? '',
-            })),
-          ]"
-          :label="t('usageOverview.person')"
-          size="md"
-          @update:model-value="personID = Number($event) || 0"
-        />
-      </label>
-      <label class="modern-usage-overview__field">
+      <AppDateTimeRangePicker
+        v-model:from="from"
+        v-model:to="to"
+        :preset="preset"
+        :label="t('usageOverview.timeRange')"
+        size="md"
+        @update:preset="applyPreset"
+        @apply="applyCustom"
+      />
+      <AppSelect
+        :model-value="groupID ? String(groupID) : ''"
+        :options="[
+          { value: '', label: t('usageOverview.allGroups') },
+          ...(groupsQuery.data.value ?? []).map((group) => ({
+            value: String(group.id),
+            label: group.name,
+          })),
+        ]"
+        :label="t('usageOverview.group')"
+        size="md"
+        @update:model-value="groupID = Number($event) || 0"
+      />
+      <AppSelect
+        :model-value="personID ? String(personID) : ''"
+        :options="[
+          { value: '', label: t('usageOverview.allPeople') },
+          ...people.map((person) => ({
+            value: String(person.id),
+            label: personNames.get(person.id) ?? '',
+          })),
+        ]"
+        :label="t('usageOverview.person')"
+        size="md"
+        @update:model-value="personID = Number($event) || 0"
+      />
+      <div class="modern-usage-overview__field">
         <span class="modern-usage-overview__field-label">{{ t('usageOverview.metric') }}</span>
         <AppSegmentedControl
           :model-value="metric"
@@ -342,11 +332,12 @@ const trend = computed(() => {
             { value: 'tokens', label: t('usageOverview.metrics.tokens') },
           ]"
           :label="t('usageOverview.metric')"
+          label-hidden
           size="md"
           @update:model-value="metric = $event as 'requests' | 'tokens'"
         />
-      </label>
-      <AppButton class="modern-usage-overview__refresh" variant="outline" size="md" @click="refreshReport">
+      </div>
+      <AppButton class="modern-usage-overview__refresh" variant="outline" @click="refreshReport">
         {{ t('usageOverview.refresh') }}
       </AppButton>
     </header>
@@ -517,10 +508,24 @@ const trend = computed(() => {
 }
 
 .modern-usage-overview__filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(300px, 1.4fr) minmax(200px, 1fr) minmax(200px, 1fr) auto auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.modern-usage-overview__field {
+  display: grid;
+  gap: 4px;
+}
+
+.modern-usage-overview__field-label {
+  font-size: 0.8125rem;
+  color: var(--modern-color-text-muted, inherit);
+}
+
+.modern-usage-overview__refresh {
+  align-self: end;
 }
 
 .modern-usage-overview__card {
