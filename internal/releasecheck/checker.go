@@ -2,7 +2,6 @@ package releasecheck
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
@@ -44,52 +43,9 @@ func newChecker(fetcher releaseFetcher, current string) *Checker {
 	}
 }
 
-// Check returns the cached result or synchronously refreshes it from GitHub.
-// When force is true, it ignores an unexpired cache and fetches GitHub again.
+// Check 返回"无可用更新"。私有分支不检查官方渠道更新。
 func (checker *Checker) Check(ctx context.Context, force bool) (*Update, error) {
-	if checker == nil {
-		return nil, errors.New("check GitHub releases: checker is unavailable")
-	}
-	if isDevelopmentVersion(checker.current) {
-		return nil, nil
-	}
-	if checker.fetcher == nil {
-		return nil, errors.New("check GitHub releases: checker is unavailable")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	checker.mu.Lock()
-	defer checker.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	now := checker.currentTime()
-	if !force && now.Before(checker.expiresAt) {
-		return cloneUpdate(checker.update), checker.cachedErr
-	}
-
-	releases, err := checker.fetcher.Fetch(ctx)
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	if err != nil {
-		checker.expiresAt = checker.currentTime().Add(failureCacheDuration)
-		if checker.hasResult {
-			checker.cachedErr = nil
-			return cloneUpdate(checker.update), nil
-		}
-		checker.update = nil
-		checker.cachedErr = err
-		return nil, err
-	}
-
-	checker.update = SelectUpdate(checker.current, releases)
-	checker.hasResult = true
-	checker.cachedErr = nil
-	checker.expiresAt = checker.currentTime().Add(successCacheDuration)
-	return cloneUpdate(checker.update), nil
+	return nil, nil
 }
 
 func (checker *Checker) currentTime() time.Time {
