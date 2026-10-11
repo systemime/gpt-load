@@ -142,6 +142,15 @@ function formatCompact(value: number): string {
   return String(value)
 }
 
+// ---------- 悬浮提示 ----------
+const hoverTip = ref<{ x: number; y: number; title: string; detail: string } | null>(null)
+function showTip(event: MouseEvent, title: string, detail: string): void {
+  hoverTip.value = { x: event.clientX + 14, y: event.clientY + 14, title, detail }
+}
+function hideTip(): void {
+  hoverTip.value = null
+}
+
 // ---------- 饼图(环形) ----------
 const donut = computed(() => {
   const segments = people.value
@@ -367,7 +376,11 @@ const trend = computed(() => {
                 :fill="arc.color"
                 stroke="var(--modern-color-surface, #fff)"
                 stroke-width="1"
-              />
+                @mousemove="showTip($event, arc.label, `${formatCompact(arc.value)} · ${arc.percent}%`)"
+                @mouseleave="hideTip"
+              >
+                <title>{{ `${arc.label}: ${formatCompact(arc.value)} (${arc.percent}%)` }}</title>
+              </path>
             </svg>
             <ul class="modern-usage-overview__legend">
               <li v-for="arc in donut.arcs" :key="arc.id">
@@ -413,6 +426,8 @@ const trend = computed(() => {
                   :width="bar.barWidth"
                   :height="part.height"
                   :fill="personColor.get(part.id) ?? PALETTE[0]"
+                  @mousemove="showTip($event, `${personNames.get(part.id) ?? ''} · ${xLabelFor(bar.day)}`, formatCompact(part.value))"
+                  @mouseleave="hideTip"
                 >
                   <title>
                     {{
@@ -475,6 +490,16 @@ const trend = computed(() => {
                 :cy="point.y"
                 r="10"
                 fill="transparent"
+                @mousemove="showTip($event, xLabelFor(point.day), formatCompact(point.value))"
+                @mouseleave="hideTip"
+              />
+              <circle
+                v-for="point in trend.plotted"
+                :key="'hit' + point.day"
+                :cx="point.x"
+                :cy="point.y"
+                r="10"
+                fill="transparent"
               >
                 <title>{{ `${xLabelFor(point.day)}: ${formatCompact(point.value)}` }}</title>
               </circle>
@@ -519,6 +544,14 @@ const trend = computed(() => {
         </section>
       </template>
     </template>
+    <div
+      v-if="hoverTip"
+      class="modern-usage-overview__tooltip"
+      :style="{ left: hoverTip.x + 'px', top: hoverTip.y + 'px' }"
+    >
+      <strong>{{ hoverTip.title }}</strong>
+      <span>{{ hoverTip.detail }}</span>
+    </div>
   </div>
 </template>
 
@@ -619,6 +652,24 @@ const trend = computed(() => {
 
 .modern-usage-overview__scroll svg {
   display: block;
+}
+
+.modern-usage-overview__tooltip {
+  position: fixed;
+  z-index: 50;
+  display: grid;
+  gap: 2px;
+  pointer-events: none;
+  background: var(--modern-color-surface, #1c1c1e);
+  border: 1px solid var(--modern-color-border, rgba(127, 127, 127, 0.4));
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.8125rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.modern-usage-overview__tooltip strong {
+  font-weight: 600;
 }
 
 .modern-usage-overview__tick {
