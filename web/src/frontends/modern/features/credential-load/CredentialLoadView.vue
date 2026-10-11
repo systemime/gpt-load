@@ -70,6 +70,16 @@ const errorRows = computed(() => {
     .sort((left, right) => errorTotal(right.errors) - errorTotal(left.errors))
 })
 
+const rightAlignedColumns = new Set([
+  'inflight',
+  'requests',
+  'successRate',
+  'affinity',
+  'tokens',
+  'cacheRead',
+  'pressure',
+])
+
 const errorColumns: Array<{ key: keyof CredentialLoadErrors; label: string }> = [
   { key: 'rateLimited', label: 'rateLimited' },
   { key: 'connect', label: 'connect' },
@@ -144,7 +154,12 @@ function formatTokens(value: number): string {
 
       <div class="modern-credential-load__table" role="table">
         <div class="modern-credential-load__row modern-credential-load__row--head" role="row">
-          <span v-for="column in (['credential','status','inflight','requests','share','successRate','affinity','tokens','cacheRead','pressure'] as const)" :key="column" role="columnheader">
+          <span
+            v-for="column in (['credential','status','inflight','requests','share','successRate','affinity','tokens','cacheRead','pressure'] as const)"
+            :key="column"
+            role="columnheader"
+            :class="{ 'modern-credential-load__num': rightAlignedColumns.has(column) }"
+          >
             {{ t(`credentialLoad.columns.${column}`) }}
           </span>
         </div>
@@ -186,7 +201,12 @@ function formatTokens(value: number): string {
         <div v-if="errorRows.length > 0" class="modern-credential-load__table modern-credential-load__table--errors" role="table">
           <div class="modern-credential-load__row modern-credential-load__row--head" role="row">
             <span role="columnheader">{{ t('credentialLoad.columns.credential') }}</span>
-            <span v-for="column in errorColumns" :key="column.key" role="columnheader">
+            <span
+              v-for="column in errorColumns"
+              :key="column.key"
+              role="columnheader"
+              class="modern-credential-load__num"
+            >
               {{ t(`credentialLoad.errors.${column.label}`) }}
             </span>
           </div>

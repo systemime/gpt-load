@@ -92,6 +92,16 @@ function statusTone(status: string): string {
   return status === 'active' ? 'credential-load__status--active' : 'credential-load__status--muted'
 }
 
+const rightAlignedColumns = new Set([
+  'inflight',
+  'requests',
+  'successRate',
+  'affinity',
+  'tokens',
+  'cacheRead',
+  'pressure',
+])
+
 const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: string }> = [
   { key: 'rate_limited', label: 'rateLimited' },
   { key: 'connect', label: 'connect' },
@@ -154,6 +164,7 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
             ]"
             :key="column"
             role="columnheader"
+            :class="{ 'credential-load__number': rightAlignedColumns.has(column) }"
           >
             {{ t(`monitor.credentials.columns.${column}`) }}
           </span>
@@ -203,7 +214,12 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
         >
           <div class="credential-load__row credential-load__row--head" role="row">
             <span role="columnheader">{{ t('monitor.credentials.columns.credential') }}</span>
-            <span v-for="column in errorColumns" :key="column.key" role="columnheader">
+            <span
+              v-for="column in errorColumns"
+              :key="column.key"
+              role="columnheader"
+              class="credential-load__number"
+            >
               {{ t(`monitor.credentials.errors.${column.label}`) }}
             </span>
           </div>

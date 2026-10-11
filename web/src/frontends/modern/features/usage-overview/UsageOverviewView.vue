@@ -52,6 +52,7 @@ const to = ref('')
 const groupID = ref(0)
 const personID = ref(0)
 const metric = ref<'requests' | 'tokens'>('requests')
+const hoverIndex = ref<number | null>(null)
 
 const groupsQuery = useQuery({
   queryKey: ['modern', 'usage-overview', 'group-options'],
@@ -294,8 +295,26 @@ const trend = computed(() => {
     }
   })
   const path = plotted.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
-  return { plotted, path }
+  return { plotted, path, slotWidth }
 })
+
+function onTrendMove(event: MouseEvent): void {
+  const svg = event.currentTarget as SVGSVGElement
+  const rect = svg.getBoundingClientRect()
+  if (rect.width <= 0) return
+  const chartX = ((event.clientX - rect.left) / rect.width) * CHART_WIDTH
+  const slots = trend.value.slotWidth
+  if (slots <= 0 || trend.value.plotted.length === 0) return
+  let index = Math.floor((chartX - PLOT_LEFT) / slots)
+  index = Math.max(0, Math.min(trend.value.plotted.length - 1, index))
+  hoverIndex.value = index
+  const point = trend.value.plotted[index]
+  showTip(event, xLabelFor(point.day), formatCompact(point.value))
+}
+function onTrendLeave(): void {
+  hoverIndex.value = null
+  hideTip()
+}
 
 </script>
 
@@ -456,6 +475,8 @@ const trend = computed(() => {
               :viewBox="`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`"
               role="img"
               :aria-label="t('usageOverview.trendTitle')"
+              @mousemove="onTrendMove"
+              @mouseleave="onTrendLeave"
             >
               <g v-for="tick in yTicks" :key="'gy' + tick.y">
                 <line
@@ -483,15 +504,20 @@ const trend = computed(() => {
               >
                 <title>{{ `${xLabelFor(point.day)}: ${formatCompact(point.value)}` }}</title>
               </circle>
+              <line
+                v-if="hoverIndex !== null && trend.plotted[hoverIndex]"
+                :x1="trend.plotted[hoverIndex].x" :x2="trend.plotted[hoverIndex].x"
+                :y1="PLOT_TOP" :y2="PLOT_TOP + PLOT_HEIGHT"
+                stroke="currentColor" opacity="0.25"
+              />
               <circle
-                v-for="point in trend.plotted"
-                :key="'hit' + point.day"
-                :cx="point.x"
-                :cy="point.y"
-                r="10"
-                fill="transparent"
-                @mousemove="showTip($event, xLabelFor(point.day), formatCompact(point.value))"
-                @mouseleave="hideTip"
+                v-if="hoverIndex !== null && trend.plotted[hoverIndex]"
+                :cx="trend.plotted[hoverIndex].x"
+                :cy="trend.plotted[hoverIndex].y"
+                r="5"
+                fill="var(--modern-color-action, #3b82f6)"
+                stroke="var(--modern-color-surface, #fff)"
+                stroke-width="2"
               />
               <circle
                 v-for="point in trend.plotted"
