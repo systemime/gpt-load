@@ -393,7 +393,6 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
                   'tokens',
                   'cacheRead',
                   'quota5h',
-                  'quotaWeek',
                   'errors',
                 ]"
                 :key="column"
@@ -464,20 +463,6 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
                   ></span>
                 </span>
                 {{ quotaPercent(item.credits_5h, report.plan.quota_credits_5h) }}%
-              </span>
-              <span
-                role="cell"
-                class="credential-load__number credential-load__req"
-                :title="`${Math.round(item.credits_7d)} / ${report.plan.quota_credits_7d} ${t('monitor.credentials.creditsUnit')}`"
-              >
-                <span class="credential-load__bar" aria-hidden="true">
-                  <span
-                    class="credential-load__bar-fill"
-                    :class="`credential-load__bar-fill--${quotaTone(item.credits_7d / (report.plan.quota_credits_7d || 1))}`"
-                    :style="{ width: `${Math.min(100, quotaPercent(item.credits_7d, report.plan.quota_credits_7d))}%` }"
-                  ></span>
-                </span>
-                {{ quotaPercent(item.credits_7d, report.plan.quota_credits_7d) }}%
               </span>
               <span
                 role="cell"
@@ -722,7 +707,7 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
 }
 
 .credential-load__table--creds .credential-load__row {
-  grid-template-columns: minmax(88px, 1.1fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) minmax(44px, 0.5fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) repeat(4, minmax(52px, 0.7fr)) minmax(88px, 1fr) minmax(88px, 1fr) minmax(44px, 0.5fr);
+  grid-template-columns: minmax(88px, 1.1fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) minmax(44px, 0.5fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) repeat(4, minmax(52px, 0.7fr)) minmax(88px, 1fr) minmax(44px, 0.5fr);
 }
 
 .credential-load__table--errors .credential-load__row {

@@ -374,7 +374,7 @@ function quotaTone(ratio: number): 'ok' | 'warn' | 'high' {
               <span role="columnheader">{{ t('credentialLoad.columns.credential') }}</span>
               <span role="columnheader">{{ t('credentialLoad.columns.status') }}</span>
               <span
-                v-for="column in (['inflight','queued','pressure','requests','successRate','affinity','tokens','cacheRead','quota5h','quotaWeek'] as const)"
+                v-for="column in (['inflight','queued','pressure','requests','successRate','affinity','tokens','cacheRead','quota5h'] as const)"
                 :key="column"
                 role="columnheader"
                 class="modern-credential-load__num"
@@ -436,20 +436,6 @@ function quotaTone(ratio: number): 'ok' | 'warn' | 'high' {
                   ></span>
                 </span>
                 {{ quotaPercent(item.credits5h, report.plan.quotaCredits5h) }}%
-              </span>
-              <span
-                role="cell"
-                class="modern-credential-load__num modern-credential-load__req"
-                :title="`${Math.round(item.credits7d)} / ${report.plan.quotaCredits7d} ${t('credentialLoad.creditsUnit')}`"
-              >
-                <span class="modern-credential-load__bar" aria-hidden="true">
-                  <span
-                    class="modern-credential-load__bar-fill"
-                    :class="`modern-credential-load__bar-fill--${quotaTone(item.credits7d / (report.plan.quotaCredits7d || 1))}`"
-                    :style="{ width: `${Math.min(100, quotaPercent(item.credits7d, report.plan.quotaCredits7d))}%` }"
-                  ></span>
-                </span>
-                {{ quotaPercent(item.credits7d, report.plan.quotaCredits7d) }}%
               </span>
               <span
                 role="cell"
@@ -693,7 +679,7 @@ function quotaTone(ratio: number): 'ok' | 'warn' | 'high' {
 }
 
 .modern-credential-load__table--creds .modern-credential-load__row {
-  grid-template-columns: minmax(88px, 1.1fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) minmax(44px, 0.5fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) repeat(4, minmax(52px, 0.7fr)) minmax(88px, 1fr) minmax(88px, 1fr) minmax(44px, 0.5fr);
+  grid-template-columns: minmax(88px, 1.1fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) minmax(44px, 0.5fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) repeat(4, minmax(52px, 0.7fr)) minmax(88px, 1fr) minmax(44px, 0.5fr);
 }
 
 .modern-credential-load__table--errors .modern-credential-load__row {
