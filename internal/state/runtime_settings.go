@@ -38,6 +38,7 @@ const (
 	SettingCredentialQueueEnabled           = "credential_queue_enabled"
 	SettingCredentialQueueTimeout           = "credential_queue_timeout"
 	SettingCredentialUsageBalance           = "credential_usage_balance_enabled"
+	SettingGlmCodingPlan                    = "glm_coding_plan"
 	SettingValidationInterval               = "validation_interval"
 	SettingRequestLogRetentionDays          = "request_log_retention_days"
 	SettingModelsDevAutoSyncEnabled         = "models_dev_auto_sync_enabled"
@@ -58,6 +59,25 @@ const (
 	RouteStrategyNativeFirst RouteStrategy = "native_first"
 	RouteStrategyWeightedMix RouteStrategy = "weighted_mix"
 )
+
+// GlmCodingPlan 标识 GLM 编码套餐档位, 决定团队积分额度(5h/周)。
+// 额度数值与官方「团队标准版/高级版」一致, 仅用于水位展示与预警。
+type GlmCodingPlan string
+
+const (
+	GlmPlanStandard GlmCodingPlan = "standard"
+	GlmPlanPremium  GlmCodingPlan = "premium"
+)
+
+// GlmPlanQuota 返回套餐的积分额度: 5 小时窗口与每周窗口(官方文档口径)。
+func (plan GlmCodingPlan) Quota() (credits5h float64, creditsWeek float64) {
+	switch plan {
+	case GlmPlanPremium:
+		return 35_000, 155_000
+	default:
+		return 15_000, 66_000
+	}
+}
 
 const (
 	defaultRequestLogRetentionDays = 7
@@ -99,6 +119,7 @@ type RuntimeSettings struct {
 	CredentialQueueEnabled           bool
 	CredentialQueueTimeout           time.Duration
 	CredentialUsageBalance           bool
+	GlmCodingPlan                    GlmCodingPlan
 	ValidationInterval               time.Duration
 	RequestLogRetentionDays          int
 	ModelsDevAutoSyncEnabled         bool
@@ -137,6 +158,7 @@ func DefaultRuntimeSettings() RuntimeSettings {
 		CredentialQueueEnabled:     true,
 		CredentialQueueTimeout:     time.Duration(defaultCredentialQueueTimeout) * time.Second,
 		CredentialUsageBalance:     false,
+		GlmCodingPlan:              GlmPlanStandard,
 		ValidationInterval:         10 * time.Minute,
 		RequestLogRetentionDays:    defaultRequestLogRetentionDays,
 		ModelsDevAutoSyncEnabled:   true,
@@ -165,6 +187,7 @@ func IsRuntimeSettingKey(key string) bool {
 		SettingCredentialQueueEnabled,
 		SettingCredentialQueueTimeout,
 		SettingCredentialUsageBalance,
+		SettingGlmCodingPlan,
 		SettingValidationInterval,
 		SettingRequestLogRetentionDays,
 		SettingModelsDevAutoSyncEnabled:
@@ -305,6 +328,12 @@ func ResolveRuntimeSettings(settings config.Settings) (RuntimeSettings, error) {
 				return RuntimeSettings{}, err
 			}
 			resolved.CredentialUsageBalance = value
+		case SettingGlmCodingPlan:
+			parsed, err := parseGlmCodingPlan(value)
+			if err != nil {
+				return RuntimeSettings{}, err
+			}
+			resolved.GlmCodingPlan = parsed
 		case SettingValidationInterval:
 			seconds, err := positiveWholeSeconds(key, value)
 			if err != nil {
@@ -477,6 +506,9 @@ func ValidateRuntimeSetting(key string, value any) error {
 		return err
 	case SettingCredentialUsageBalance:
 		_, err := strictBoolean(key, value)
+		return err
+	case SettingGlmCodingPlan:
+		_, err := parseGlmCodingPlan(value)
 		return err
 	case SettingRequestLogRetentionDays:
 		_, err := wholeNumberInRange(
@@ -773,4 +805,14 @@ func parseCodexLiveMode(value any) (CodexLiveMode, error) {
 		}
 	}
 	return "", fmt.Errorf("%s must be off, direct or relay", SettingCodexLiveMode)
+}
+
+func parseGlmCodingPlan(value any) (GlmCodingPlan, error) {
+	if text, ok := value.(string); ok {
+		switch plan := GlmCodingPlan(text); plan {
+		case GlmPlanStandard, GlmPlanPremium:
+			return plan, nil
+		}
+	}
+	return "", fmt.Errorf("%s must be standard or premium", SettingGlmCodingPlan)
 }

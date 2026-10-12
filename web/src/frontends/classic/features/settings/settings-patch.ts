@@ -126,6 +126,8 @@ export function setSettingsOverride(
       next.values.credential_queue_enabled = base.values.credential_queue_enabled
     } else if (key === 'credential_usage_balance_enabled') {
       next.values.credential_usage_balance_enabled = base.values.credential_usage_balance_enabled
+    } else if (key === 'glm_coding_plan') {
+      next.values.glm_coding_plan = base.values.glm_coding_plan
     } else if (key === 'models_dev_auto_sync_enabled') {
       next.values.models_dev_auto_sync_enabled = base.values.models_dev_auto_sync_enabled
     } else if (key === 'cors') {
@@ -183,6 +185,7 @@ function normalizedWireValue(
   | boolean
   | RouteStrategy
   | CodexLiveMode
+  | SettingsValues['glm_coding_plan']
   | HeaderRulesDto
   | CORSConfigDto
   | AutoModelConfigDto
@@ -226,6 +229,7 @@ function normalizedIdentityValue(
   | boolean
   | RouteStrategy
   | CodexLiveMode
+  | SettingsValues['glm_coding_plan']
   | HeaderRulesDto
   | CORSConfigDto
   | AutoModelConfigDto

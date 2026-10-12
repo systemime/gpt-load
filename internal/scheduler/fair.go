@@ -138,23 +138,25 @@ func (iterator *Iterator) selectCredential(candidates []weightedCredential, pref
 
 // usagePressures 计算候选集内每凭证的用量压力 = max(各窗口/各指标的实际份额/目标份额),
 // 目标份额取有效权重占比。任一维度有数据即激活; 全零返回 false 回落公平序。
+// token 指标使用官方积分口径(模型系数 + 缓存命中折扣 + 非高峰半价),
+// 缓存热凭证积分份额低, 均衡器自然偏向缓存命中率高的一侧。
 // preferred(亲和)优先级在其之上, 已钉住的会话不受用量均衡影响。
 func (iterator *Iterator) usagePressures(eligible []weightedCredential) (map[uint]float64, bool) {
 	if iterator.credentialUsage == nil || !iterator.usageBalance || len(eligible) < 2 {
 		return nil, false
 	}
 	usages := make(map[uint]state.CredentialUsage, len(eligible))
-	var totalWeight, requests5h, tokens5h, requests7d, tokens7d float64
+	var totalWeight, requests5h, credits5h, requests7d, credits7d float64
 	for _, candidate := range eligible {
 		usage := iterator.credentialUsage.Usage(candidate.meta.ID)
 		usages[candidate.meta.ID] = usage
 		totalWeight += float64(candidate.weight)
 		requests5h += float64(usage.Requests5h)
-		tokens5h += float64(usage.Tokens5h)
+		credits5h += usage.Credits5h
 		requests7d += float64(usage.Requests7d)
-		tokens7d += float64(usage.Tokens7d)
+		credits7d += usage.Credits7d
 	}
-	if requests5h <= 0 && tokens5h <= 0 && requests7d <= 0 && tokens7d <= 0 {
+	if requests5h <= 0 && credits5h <= 0 && requests7d <= 0 && credits7d <= 0 {
 		return nil, false
 	}
 	share := func(part float64, total float64, target float64) float64 {
@@ -168,13 +170,13 @@ func (iterator *Iterator) usagePressures(eligible []weightedCredential) (map[uin
 		usage := usages[candidate.meta.ID]
 		target := float64(candidate.weight) / totalWeight
 		value := share(float64(usage.Requests5h), requests5h, target)
-		if next := share(float64(usage.Tokens5h), tokens5h, target); next > value {
+		if next := share(usage.Credits5h, credits5h, target); next > value {
 			value = next
 		}
 		if next := share(float64(usage.Requests7d), requests7d, target); next > value {
 			value = next
 		}
-		if next := share(float64(usage.Tokens7d), tokens7d, target); next > value {
+		if next := share(usage.Credits7d, credits7d, target); next > value {
 			value = next
 		}
 		pressure[candidate.meta.ID] = value

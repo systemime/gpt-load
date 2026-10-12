@@ -136,6 +136,12 @@ export default {
       credential_queue_timeoutError: '请输入 1 到 600 之间的整数。',
       credential_usage_balance_enabled: '用量均衡',
       credential_usage_balance_enabledHelp: '开启后新分派优先给 5h/7d 窗口内用量份额低的凭证（压力=实际份额/权重份额，双窗口双指标取最大）；已建立的亲和不受影响，缓存率不变。默认关闭。',
+      glm_coding_plan: 'GLM 套餐档位',
+      glm_coding_planHelp: '团队标准版: 5 小时 15000 积分 / 每周 66000 积分; 团队高级版: 35000 / 155000。档位决定凭证负载页的额度水位, 仅影响展示与预警, 不改变调度。',
+      glmPlans: {
+        standard: '标准版',
+        premium: '高级版',
+      },
       entries: '条',
       requests: '个并发',
     },

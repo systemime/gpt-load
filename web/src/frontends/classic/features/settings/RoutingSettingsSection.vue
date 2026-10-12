@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import { routeStrategies } from '@/api/control/types'
 import type { RuntimeSettingKey, SettingsResource } from '@/app/resources/settings'
+import { glmCodingPlans } from '@/app/resources/settings'
 import AppSwitch from '@/components/ui/AppSwitch.vue'
 import AppTextInput from '@/components/ui/AppTextInput.vue'
 import CompactFieldError from '@/components/ui/CompactFieldError.vue'
@@ -133,6 +134,21 @@ function setUsageBalance(value: boolean): void {
   const draft = cloneDraft()
   draft.values.credential_usage_balance_enabled = value
   publish('credential_usage_balance_enabled', draft)
+}
+
+const glmCodingPlanOptions = computed<SegmentedControlOption[]>(() =>
+  glmCodingPlans.map((plan) => ({
+    value: plan,
+    label: t(`settings.runtime.glmPlans.${plan}`),
+    disabled: props.disabled,
+  })),
+)
+
+function setGlmCodingPlan(value: string): void {
+  if (value !== 'standard' && value !== 'premium') return
+  const draft = cloneDraft()
+  draft.values.glm_coding_plan = value
+  publish('glm_coding_plan', draft)
 }
 
 function setNumber(key: (typeof numericKeys)[number], value: string): void {
@@ -265,6 +281,32 @@ function numberFieldValue(key: (typeof numericKeys)[number]): string {
             :disabled="disabled"
             :label="t('settings.affinity.credential_usage_balance_enabled')"
             @update:model-value="setUsageBalance"
+          />
+        </template>
+      </SettingRow>
+
+      <SettingRow
+        :label="t('settings.runtime.glm_coding_plan')"
+        :value="
+          isPendingRestore('glm_coding_plan')
+            ? t('settings.runtime.resetPending')
+            : t(`settings.runtime.glmPlans.${base.settings.values.glm_coding_plan}`)
+        "
+        :help="t('settings.runtime.glm_coding_planHelp')"
+        :source-label="sourceLabel('glm_coding_plan')"
+        :action-label="actionLabel('glm_coding_plan')"
+        :overridden="hasOverride('glm_coding_plan')"
+        :pending-restore="isPendingRestore('glm_coding_plan')"
+        :disabled="disabled"
+        @toggle="toggleOverride('glm_coding_plan')"
+      >
+        <template #control>
+          <SegmentedControl
+            :model-value="draft.values.glm_coding_plan"
+            :options="glmCodingPlanOptions"
+            :label="t('settings.runtime.glm_coding_plan')"
+            size="compact"
+            @update:model-value="setGlmCodingPlan"
           />
         </template>
       </SettingRow>

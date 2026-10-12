@@ -40,6 +40,8 @@ type credentialLoadItem struct {
 	Queued   int64                                `json:"queued"`
 	Usage    credentialLoadUsage                  `json:"usage"`
 	Pressure float64                              `json:"pressure"`
+	Credits5h float64                             `json:"credits_5h"`
+	Credits7d float64                             `json:"credits_7d"`
 	Windows  map[string]credentialLoadWindowStats `json:"windows"`
 	Errors5h credentialLoadErrorStats             `json:"errors_5h"`
 }
@@ -65,12 +67,17 @@ type credentialLoadGroupItem struct {
 }
 
 type credentialLoadResponse struct {
-	ObservedAtMS int64                         `json:"observed_at_ms"`
-	Cap          int                           `json:"cap"`
-	Credentials  []credentialLoadItem          `json:"credentials"`
-	AccessKeys   []credentialLoadAccessKeyItem `json:"access_keys"`
-	Groups       []credentialLoadGroupItem     `json:"groups"`
-	LocalRejects map[string]int64              `json:"local_rejects"`
+	ObservedAtMS    int64                         `json:"observed_at_ms"`
+	Cap             int                           `json:"cap"`
+	Plan            string                        `json:"plan"`
+	QuotaCredits5h  float64                       `json:"quota_credits_5h"`
+	QuotaCredits7d  float64                       `json:"quota_credits_7d"`
+	TeamCredits5h   float64                       `json:"team_credits_5h"`
+	TeamCredits7d   float64                       `json:"team_credits_7d"`
+	Credentials     []credentialLoadItem          `json:"credentials"`
+	AccessKeys      []credentialLoadAccessKeyItem `json:"access_keys"`
+	Groups          []credentialLoadGroupItem     `json:"groups"`
+	LocalRejects    map[string]int64              `json:"local_rejects"`
 }
 
 var credentialLoadErrorCategories = map[string]string{
@@ -150,9 +157,12 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 
 	slots := service.registry.Slots()
 	capacity := slots.Capacity()
+	plan := state.GlmPlanStandard
 	if snapshot := service.manager.Current(); snapshot != nil {
 		capacity = snapshot.Settings.CredentialConcurrencyLimit
+		plan = snapshot.Settings.GlmCodingPlan
 	}
+	quota5h, quota7d := plan.Quota()
 
 	views := service.registry.Snapshot()
 	usageSnapshot := service.registry.UsageTracker().SnapshotAll()
@@ -161,6 +171,9 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 	result := credentialLoadResponse{
 		ObservedAtMS: observedAt,
 		Cap:          capacity,
+		Plan:         string(plan),
+		QuotaCredits5h: quota5h,
+		QuotaCredits7d: quota7d,
 		Credentials:  make([]credentialLoadItem, 0, len(views)),
 		AccessKeys:   credentialLoadAccessKeyItems(accessKeyNames, accessKeyWindows),
 		Groups:       credentialLoadGroupItems(groupNames, groupWindows),
@@ -168,6 +181,8 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 	}
 	for _, view := range views {
 		usage := usageSnapshot[view.ID]
+		result.TeamCredits5h += usage.Credits5h
+		result.TeamCredits7d += usage.Credits7d
 		item := credentialLoadItem{
 			ID: view.ID, Name: names[view.ID], Status: string(view.Status),
 			Inflight: slots.Inflight(view.ID),
@@ -177,6 +192,8 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 				Requests7d: usage.Requests7d, Tokens7d: usage.Tokens7d,
 			},
 			Pressure: pressures[view.ID],
+			Credits5h: usage.Credits5h,
+			Credits7d: usage.Credits7d,
 			Windows:  windows[view.ID],
 			Errors5h: errorCounts[view.ID],
 		}
@@ -234,11 +251,11 @@ func credentialLoadGroupItems(
 }
 
 // credentialPressures 与调度器同式: 压力 = max(窗口×指标的实际份额/权重目标份额),
-// 全零用量时全部为 0。仅展示用, 调度真值在 scheduler.usagePressures。
+// token 指标为积分口径(与厂商计费同式)。全零用量时全部为 0。
 func credentialPressures(views []state.CredentialRuntimeView, usage map[uint]state.CredentialUsage) map[uint]float64 {
 	pressures := make(map[uint]float64, len(views))
 	weights := make(map[uint]float64, len(views))
-	var totalWeight, requests5h, tokens5h, requests7d, tokens7d float64
+	var totalWeight, requests5h, credits5h, requests7d, credits7d float64
 	for _, view := range views {
 		weight := 50.0
 		if view.WeightManual != nil && *view.WeightManual > 0 {
@@ -248,11 +265,11 @@ func credentialPressures(views []state.CredentialRuntimeView, usage map[uint]sta
 		totalWeight += weight
 		entry := usage[view.ID]
 		requests5h += float64(entry.Requests5h)
-		tokens5h += float64(entry.Tokens5h)
+		credits5h += entry.Credits5h
 		requests7d += float64(entry.Requests7d)
-		tokens7d += float64(entry.Tokens7d)
+		credits7d += entry.Credits7d
 	}
-	if totalWeight <= 0 || (requests5h <= 0 && tokens5h <= 0 && requests7d <= 0 && tokens7d <= 0) {
+	if totalWeight <= 0 || (requests5h <= 0 && credits5h <= 0 && requests7d <= 0 && credits7d <= 0) {
 		return pressures
 	}
 	share := func(part, total, target float64) float64 {
@@ -265,13 +282,13 @@ func credentialPressures(views []state.CredentialRuntimeView, usage map[uint]sta
 		entry := usage[view.ID]
 		target := weights[view.ID] / totalWeight
 		value := share(float64(entry.Requests5h), requests5h, target)
-		if next := share(float64(entry.Tokens5h), tokens5h, target); next > value {
+		if next := share(entry.Credits5h, credits5h, target); next > value {
 			value = next
 		}
 		if next := share(float64(entry.Requests7d), requests7d, target); next > value {
 			value = next
 		}
-		if next := share(float64(entry.Tokens7d), tokens7d, target); next > value {
+		if next := share(entry.Credits7d, credits7d, target); next > value {
 			value = next
 		}
 		pressures[view.ID] = value

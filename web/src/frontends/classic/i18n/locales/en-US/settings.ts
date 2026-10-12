@@ -150,6 +150,12 @@ export default {
       credential_queue_timeoutError: 'Enter a whole number between 1 and 600.',
       credential_usage_balance_enabled: 'Usage balance',
       credential_usage_balance_enabledHelp: 'When enabled, new assignments prefer credentials with lower usage share over rolling 5h/7d windows (pressure = actual share / weight share, max across windows and metrics); existing affinity pins are untouched, so cache rate is unaffected. Off by default.',
+      glm_coding_plan: 'GLM coding plan',
+      glm_coding_planHelp: 'Team standard: 15,000 credits per 5 hours / 66,000 per week; team premium: 35,000 / 155,000. The tier drives the quota gauges on the credential load page — display and alerting only, scheduling is unchanged.',
+      glmPlans: {
+        standard: 'Standard',
+        premium: 'Premium',
+      },
       entries: 'entries',
       requests: 'concurrent',
     },

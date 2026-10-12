@@ -1,4 +1,5 @@
 import type { ApiClient } from '@shared/http/client'
+import { InvalidResponseError } from '@shared/http/errors'
 import { integer, list, record, text } from './response'
 
 export const credentialLoadWindowKeys = ['1h', '5h', '24h'] as const
@@ -38,8 +39,18 @@ export interface CredentialLoadItem {
   queued: number
   usage: CredentialLoadUsage
   pressure: number
+  credits5h: number
+  credits7d: number
   windows: Record<CredentialLoadWindowKey, CredentialLoadWindow>
   errors5h: CredentialLoadErrors
+}
+
+export interface CredentialLoadPlan {
+  plan: string
+  quotaCredits5h: number
+  quotaCredits7d: number
+  teamCredits5h: number
+  teamCredits7d: number
 }
 
 export interface CredentialLoadDimension {
@@ -51,10 +62,17 @@ export interface CredentialLoadDimension {
 export interface CredentialLoadReport {
   observedAt: number
   cap: number
+  plan: CredentialLoadPlan
   credentials: CredentialLoadItem[]
   localRejects: Record<CredentialLoadWindowKey, number>
   accessKeys: CredentialLoadDimension[]
   groups: CredentialLoadDimension[]
+}
+
+function readDecimal(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
+    throw new InvalidResponseError()
+  return value
 }
 
 function readWindow(value: unknown): CredentialLoadWindow {
@@ -101,6 +119,8 @@ function readItem(value: unknown): CredentialLoadItem {
       }
     })(),
     pressure: typeof row.pressure === 'number' && Number.isFinite(row.pressure) ? row.pressure : 0,
+    credits5h: readDecimal(row.credits_5h),
+    credits7d: readDecimal(row.credits_7d),
     windows: Object.fromEntries(
       credentialLoadWindowKeys.map((key) => [key, readWindow(windows[key])]),
     ) as Record<CredentialLoadWindowKey, CredentialLoadWindow>,
@@ -136,9 +156,17 @@ function parseDimensions(value: unknown): CredentialLoadDimension[] {
 export function readCredentialLoad(value: unknown): CredentialLoadReport {
   const row = record(value)
   const rejects = record(row.local_rejects)
+  const planRow = record(row.plan)
   return {
     observedAt: integer(row.observed_at_ms),
     cap: integer(row.cap),
+    plan: {
+      plan: text(planRow.plan),
+      quotaCredits5h: readDecimal(planRow.quota_credits_5h),
+      quotaCredits7d: readDecimal(planRow.quota_credits_7d),
+      teamCredits5h: readDecimal(planRow.team_credits_5h),
+      teamCredits7d: readDecimal(planRow.team_credits_7d),
+    },
     credentials: list(row.credentials).map(readItem),
     localRejects: Object.fromEntries(
       credentialLoadWindowKeys.map((key) => [key, integer(rejects[key])]),

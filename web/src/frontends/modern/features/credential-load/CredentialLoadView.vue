@@ -162,6 +162,18 @@ function pressureTone(pressure: number): 'ok' | 'warn' | 'high' {
   if (pressure > 1.0) return 'warn'
   return 'ok'
 }
+
+// 团队积分额度水位: 共享池, 与套餐档位联动。
+const quotaRatio5h = computed(() =>
+  report.value && report.value.plan.quotaCredits5h > 0
+    ? report.value.plan.teamCredits5h / report.value.plan.quotaCredits5h
+    : 0,
+)
+const quotaRatio7d = computed(() =>
+  report.value && report.value.plan.quotaCredits7d > 0
+    ? report.value.plan.teamCredits7d / report.value.plan.quotaCredits7d
+    : 0,
+)
 </script>
 
 <template>
@@ -237,6 +249,34 @@ function pressureTone(pressure: number): 'ok' | 'warn' | 'high' {
             {{ totals.errors5h }}
           </span>
           <span class="modern-credential-load__card-label">{{ t('credentialLoad.statErrors') }}</span>
+        </div>
+        <div class="modern-credential-load__card">
+          <span
+            class="modern-credential-load__card-value"
+            :class="{
+              'modern-credential-load__danger': quotaRatio5h >= 0.9,
+              'modern-credential-load__warn': quotaRatio5h >= 0.7 && quotaRatio5h < 0.9,
+            }"
+          >
+            {{ Math.round(quotaRatio5h * 100) }}%
+          </span>
+          <span class="modern-credential-load__card-label">
+            {{ t('credentialLoad.statQuota5h') }} · {{ formatTokens(report.plan.teamCredits5h) }}/{{ formatTokens(report.plan.quotaCredits5h) }}
+          </span>
+        </div>
+        <div class="modern-credential-load__card">
+          <span
+            class="modern-credential-load__card-value"
+            :class="{
+              'modern-credential-load__danger': quotaRatio7d >= 0.9,
+              'modern-credential-load__warn': quotaRatio7d >= 0.7 && quotaRatio7d < 0.9,
+            }"
+          >
+            {{ Math.round(quotaRatio7d * 100) }}%
+          </span>
+          <span class="modern-credential-load__card-label">
+            {{ t('credentialLoad.statQuotaWeek') }} · {{ formatTokens(report.plan.teamCredits7d) }}/{{ formatTokens(report.plan.quotaCredits7d) }}
+          </span>
         </div>
       </div>
 
@@ -363,7 +403,7 @@ function pressureTone(pressure: number): 'ok' | 'warn' | 'high' {
               <span role="columnheader">{{ t('credentialLoad.columns.credential') }}</span>
               <span role="columnheader">{{ t('credentialLoad.columns.status') }}</span>
               <span
-                v-for="column in (['inflight','queued','pressure','requests','successRate','affinity','tokens','cacheRead'] as const)"
+                v-for="column in (['inflight','queued','pressure','requests','successRate','affinity','tokens','cacheRead','credits'] as const)"
                 :key="column"
                 role="columnheader"
                 class="modern-credential-load__num"
@@ -412,6 +452,7 @@ function pressureTone(pressure: number): 'ok' | 'warn' | 'high' {
                 {{ formatTokens(stats.uncachedInputTokens + stats.outputTokens) }}
               </span>
               <span role="cell" class="modern-credential-load__num">{{ formatTokens(stats.cacheReadTokens) }}</span>
+              <span role="cell" class="modern-credential-load__num">{{ Math.round(item.credits5h) }}</span>
               <span
                 role="cell"
                 class="modern-credential-load__num"
@@ -654,7 +695,7 @@ function pressureTone(pressure: number): 'ok' | 'warn' | 'high' {
 }
 
 .modern-credential-load__table--creds .modern-credential-load__row {
-  grid-template-columns: minmax(88px, 1.1fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) minmax(44px, 0.5fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) repeat(4, minmax(52px, 0.7fr)) minmax(44px, 0.5fr);
+  grid-template-columns: minmax(88px, 1.1fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) minmax(44px, 0.5fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) repeat(4, minmax(52px, 0.7fr)) minmax(52px, 0.6fr) minmax(44px, 0.5fr);
 }
 
 .modern-credential-load__table--errors .modern-credential-load__row {
@@ -753,6 +794,10 @@ function pressureTone(pressure: number): 'ok' | 'warn' | 'high' {
 
 .modern-credential-load__danger {
   color: var(--modern-color-danger, inherit);
+}
+
+.modern-credential-load__warn {
+  color: var(--modern-color-warning, inherit);
 }
 
 .modern-credential-load__empty {

@@ -4,7 +4,7 @@ import type { ApiClient } from '@shared/http/client'
 import { InvalidResponseError } from '@shared/http/errors'
 import { controlQueryKeys } from '@/app/query-keys'
 
-import { assertNoSecretLikeFields, projectArray, projectRecord, projectSafeInteger, projectString } from './projector'
+import { assertNoSecretLikeFields, projectArray, projectFiniteNumber, projectRecord, projectSafeInteger, projectString } from './projector'
 
 export type CredentialLoadWindowKey = '1h' | '5h' | '24h'
 export const credentialLoadWindowKeys: readonly CredentialLoadWindowKey[] = ['1h', '5h', '24h']
@@ -43,8 +43,18 @@ export interface CredentialLoadItem {
   queued: number
   usage: CredentialLoadUsage
   pressure: number
+  credits_5h: number
+  credits_7d: number
   windows: Record<CredentialLoadWindowKey, CredentialLoadWindow>
   errors_5h: CredentialLoadErrors
+}
+
+export interface CredentialLoadPlan {
+  plan: string
+  quota_credits_5h: number
+  quota_credits_7d: number
+  team_credits_5h: number
+  team_credits_7d: number
 }
 
 export interface CredentialLoadDimension {
@@ -56,6 +66,7 @@ export interface CredentialLoadDimension {
 export interface CredentialLoadReport {
   observed_at_ms: number
   cap: number
+  plan: CredentialLoadPlan
   credentials: CredentialLoadItem[]
   local_rejects: Record<CredentialLoadWindowKey, number>
   access_keys: CredentialLoadDimension[]
@@ -79,8 +90,9 @@ const errorFields = [
   'scheduled',
   'other',
 ] as const
-const itemFields = ['id', 'name', 'status', 'inflight', 'queued', 'usage', 'pressure', 'windows', 'errors_5h'] as const
-const reportFields = ['observed_at_ms', 'cap', 'credentials', 'local_rejects', 'access_keys', 'groups'] as const
+const itemFields = ['id', 'name', 'status', 'inflight', 'queued', 'usage', 'pressure', 'credits_5h', 'credits_7d', 'windows', 'errors_5h'] as const
+const planFields = ['plan', 'quota_credits_5h', 'quota_credits_7d', 'team_credits_5h', 'team_credits_7d'] as const
+const reportFields = ['observed_at_ms', 'cap', 'plan', 'quota_credits_5h', 'quota_credits_7d', 'team_credits_5h', 'team_credits_7d', 'credentials', 'local_rejects', 'access_keys', 'groups'] as const
 
 function invalidResponse(): never {
   throw new InvalidResponseError()
@@ -145,8 +157,22 @@ function projectItem(value: unknown): CredentialLoadItem {
       typeof record.pressure === 'number' && Number.isFinite(record.pressure) && record.pressure >= 0
         ? record.pressure
         : 0,
+    credits_5h: projectFiniteNumber(record.credits_5h, { minimum: 0 }),
+    credits_7d: projectFiniteNumber(record.credits_7d, { minimum: 0 }),
     windows: mapped,
     errors_5h: projectErrors(record.errors_5h),
+  }
+}
+
+function projectPlan(value: unknown): CredentialLoadPlan {
+  const row = projectRecord(value)
+  assertNoSecretLikeFields(row, planFields)
+  return {
+    plan: projectString(row.plan, { allowEmpty: true }),
+    quota_credits_5h: projectFiniteNumber(row.quota_credits_5h, { minimum: 0 }),
+    quota_credits_7d: projectFiniteNumber(row.quota_credits_7d, { minimum: 0 }),
+    team_credits_5h: projectFiniteNumber(row.team_credits_5h, { minimum: 0 }),
+    team_credits_7d: projectFiniteNumber(row.team_credits_7d, { minimum: 0 }),
   }
 }
 
@@ -179,6 +205,7 @@ export function projectCredentialLoad(value: unknown): CredentialLoadReport {
   return {
     observed_at_ms: projectSafeInteger(record.observed_at_ms, { minimum: 0 }),
     cap: projectSafeInteger(record.cap, { minimum: 0 }),
+    plan: projectPlan(record.plan),
     credentials: projectArray(record.credentials, projectItem),
     local_rejects: mapped,
     access_keys: accessKeys,

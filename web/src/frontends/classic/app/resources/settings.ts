@@ -41,6 +41,8 @@ import {
   type AutoEntryDto,
 } from './auto-model'
 
+export const glmCodingPlans = ['standard', 'premium'] as const
+
 export const runtimeSettingKeys = [
   'global_concurrency_limit',
   'default_access_key_concurrency_limit',
@@ -64,6 +66,7 @@ export const runtimeSettingKeys = [
   'credential_queue_enabled',
   'credential_queue_timeout',
   'credential_usage_balance_enabled',
+  'glm_coding_plan',
   'validation_interval',
   'request_log_retention_days',
   'models_dev_auto_sync_enabled',
@@ -94,6 +97,7 @@ export type TimeoutSettingKey = Exclude<
   | 'credential_queue_enabled'
   | 'credential_queue_timeout'
   | 'credential_usage_balance_enabled'
+  | 'glm_coding_plan'
   | 'request_log_retention_days'
   | 'models_dev_auto_sync_enabled'
   | 'auto_model'
@@ -143,6 +147,7 @@ export interface SettingsValues {
   credential_concurrency_limit: number
   credential_queue_enabled: boolean
   credential_usage_balance_enabled: boolean
+  glm_coding_plan: 'standard' | 'premium'
   credential_queue_timeout: number
   validation_interval: number
   request_log_retention_days: number
@@ -187,6 +192,7 @@ export type SettingsPatch = Partial<{
   credential_concurrency_limit: number | null
   credential_queue_enabled: boolean | null
   credential_usage_balance_enabled: boolean | null
+  glm_coding_plan: 'standard' | 'premium' | null
   credential_queue_timeout: number | null
   validation_interval: number | null
   request_log_retention_days: number | null
@@ -328,6 +334,7 @@ export function projectSettings(value: unknown): SettingsDto {
       }),
       credential_queue_enabled: projectBoolean(values.credential_queue_enabled),
       credential_usage_balance_enabled: projectBoolean(values.credential_usage_balance_enabled),
+      glm_coding_plan: projectEnum(values.glm_coding_plan, glmCodingPlans),
       credential_queue_timeout: projectSafeInteger(values.credential_queue_timeout, {
         minimum: 1,
         maximum: 600,

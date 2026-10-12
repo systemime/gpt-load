@@ -142,6 +142,12 @@ export default {
       credential_queue_timeoutError: '1 から 600 までの整数を入力してください。',
       credential_usage_balance_enabled: '使用量バランス',
       credential_usage_balance_enabledHelp: '有効にすると、直近 5h/7d ウィンドウの使用シェアが低い認証情報を新規割り当てに優先します（圧力=実際のシェア/重みシェア、ウィンドウと指標の最大値）。既存のアフィニティは影響を受けず、キャッシュ率は変わりません。既定は無効。',
+      glm_coding_plan: 'GLM プラン',
+      glm_coding_planHelp: 'チーム標準: 5 時間 15,000 クレジット / 週 66,000。チームプレミアム: 35,000 / 155,000。設定は認証情報負荷ページのクォータ表示に反映され、表示と警告のみでスケジューリングは変わりません。',
+      glmPlans: {
+        standard: '標準',
+        premium: 'プレミアム',
+      },
       entries: '件',
       requests: '同時',
     },
