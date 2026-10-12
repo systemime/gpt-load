@@ -102,7 +102,7 @@ SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN uncached_input_tokens + ou
 SUM(CASE WHEN source = 2 AND completed_at_ms > ? THEN `+glmCreditCoefficientSQL+` ELSE 0 END) AS credits_5h,
 SUM(CASE WHEN source = 2 THEN `+glmCreditCoefficientSQL+` ELSE 0 END) AS credits_7d`,
 			fiveHoursMS, fiveHoursMS, weekStartMS, weekStartMS, fiveHoursMS).
-		Where("credential_id IN ?", credentialIDs).
+		Where("credential_id IN ? AND completed_at_ms > ?", credentialIDs, weekStartMS).
 		Group("credential_id").
 		Scan(&rows).Error; err != nil {
 		return err
