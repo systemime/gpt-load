@@ -43,7 +43,7 @@ export default {
       creditsUnit: 'credits',
       keyActive: 'active',
       keyIdle: 'no traffic',
-      pressureHelp: 'Pressure = this key\'s actual usage share ÷ its weight target share\nUsage follows the official credit formula: credits = (input×coef + cached×cached-coef + output×output-coef) ÷ 10000\nGLM-5.3 coefs 6.9/1.7/24, GLM-5.3-Flash 2.3/0.56/8; off-peak (outside Mon-Fri 14:00-18:00 UTC+8) billed at 50%\nHigher cache hits mean fewer credits, so balancing favors cache-warm credentials; affinity sessions take priority',
+      pressureHelp: 'Pressure = this key\'s actual usage share ÷ its weight target share\nUsage follows the official credit formula: credits = (input×coef + cached×cached-coef + output×output-coef) ÷ 10000\nGLM-5.3 coefs 6.9/1.7/24, GLM-5.3-Flash 2.3/0.56/8; billed at 1x (matches the official console)\nWeekly window is rolling 7 days; the official one is a fixed 7-day cycle from purchase, so a gap is expected\nHigher cache hits mean fewer credits, so balancing favors cache-warm credentials; affinity sessions take priority',
       windows: { '1h': 'Last hour', '5h': 'Last 5 hours', '24h': 'Last 24 hours' },
       summary: '{count} credentials · per-credential cap {cap} · local rejects {rejects}',
       queued: '{count} queued',

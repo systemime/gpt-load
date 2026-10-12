@@ -128,6 +128,8 @@ export function setSettingsOverride(
       next.values.credential_usage_balance_enabled = base.values.credential_usage_balance_enabled
     } else if (key === 'glm_coding_plan') {
       next.values.glm_coding_plan = base.values.glm_coding_plan
+    } else if (key === 'glm_week_reset_anchor_ms') {
+      next.values.glm_week_reset_anchor_ms = base.values.glm_week_reset_anchor_ms
     } else if (key === 'models_dev_auto_sync_enabled') {
       next.values.models_dev_auto_sync_enabled = base.values.models_dev_auto_sync_enabled
     } else if (key === 'cors') {

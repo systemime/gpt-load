@@ -32,24 +32,27 @@ const emit = defineEmits<{
   change: [change: SettingsDraftChange]
 }>()
 const { locale, t } = useI18n()
-const numericKeys = ['affinity_ttl', 'affinity_capacity', 'credential_concurrency_limit', 'credential_queue_timeout'] as const
+const numericKeys = ['affinity_ttl', 'affinity_capacity', 'credential_concurrency_limit', 'credential_queue_timeout', 'glm_week_reset_anchor_ms'] as const
 const numericUnits: Record<(typeof numericKeys)[number], string> = {
   affinity_ttl: 'settings.runtime.seconds',
   affinity_capacity: 'settings.affinity.entries',
   credential_concurrency_limit: 'settings.affinity.requests',
   credential_queue_timeout: 'settings.runtime.seconds',
+  glm_week_reset_anchor_ms: 'settings.runtime.milliseconds',
 }
 const numericMaximums: Record<(typeof numericKeys)[number], string> = {
   affinity_ttl: '9223372036',
   affinity_capacity: '1000000',
   credential_concurrency_limit: '64',
   credential_queue_timeout: '600',
+  glm_week_reset_anchor_ms: '9007199254740991',
 }
 const numericMinimums: Record<(typeof numericKeys)[number], string> = {
   affinity_ttl: '1',
   affinity_capacity: '1',
   credential_concurrency_limit: '0',
   credential_queue_timeout: '1',
+  glm_week_reset_anchor_ms: '0',
 }
 const routeStrategyOptions = computed<SegmentedControlOption[]>(() =>
   routeStrategies.map((value) => ({
@@ -166,7 +169,9 @@ function numberFieldError(key: (typeof numericKeys)[number]): string | undefined
         ? isValidAffinityCapacity(props.draft.values[key])
         : key === 'credential_concurrency_limit'
           ? isValidCredentialConcurrencyLimit(props.draft.values[key])
-          : isValidCredentialQueueTimeout(props.draft.values[key])
+          : key === 'glm_week_reset_anchor_ms'
+            ? Number.isInteger(props.draft.values[key]) && props.draft.values[key] >= 0
+            : isValidCredentialQueueTimeout(props.draft.values[key])
   return valid ? undefined : t(`settings.affinity.${key}Error`)
 }
 

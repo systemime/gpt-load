@@ -105,6 +105,7 @@ export default {
       environmentManaged:
         'This setting is managed by an environment variable and cannot be changed here.',
       seconds: 'seconds',
+      milliseconds: 'ms',
       countUnit: 'times',
       timeoutError: 'Enter a positive safe integer no greater than 9,223,372,036.',
       nonNegativeIntegerError: 'Enter 0 or a positive whole number.',
@@ -156,6 +157,10 @@ export default {
         standard: 'Standard',
         premium: 'Premium',
       },
+      glm_week_reset_anchor_ms: 'Weekly reset anchor',
+      glm_week_reset_anchor_msHelp: 'Reset moment of the official weekly cycle (epoch milliseconds). The official plan resets every 7 days from purchase, e.g. 2026-10-08 08:59 (UTC+8) = 1791421140000. 0 means a rolling 7-day window.',
+      glm_week_reset_anchor_msEffective: 'Anchor {value}',
+      glm_week_reset_anchor_msError: 'Enter a non-negative integer number of milliseconds.',
       entries: 'entries',
       requests: 'concurrent',
     },

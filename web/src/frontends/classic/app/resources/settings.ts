@@ -67,6 +67,7 @@ export const runtimeSettingKeys = [
   'credential_queue_timeout',
   'credential_usage_balance_enabled',
   'glm_coding_plan',
+  'glm_week_reset_anchor_ms',
   'validation_interval',
   'request_log_retention_days',
   'models_dev_auto_sync_enabled',
@@ -98,6 +99,7 @@ export type TimeoutSettingKey = Exclude<
   | 'credential_queue_timeout'
   | 'credential_usage_balance_enabled'
   | 'glm_coding_plan'
+  | 'glm_week_reset_anchor_ms'
   | 'request_log_retention_days'
   | 'models_dev_auto_sync_enabled'
   | 'auto_model'
@@ -148,6 +150,7 @@ export interface SettingsValues {
   credential_queue_enabled: boolean
   credential_usage_balance_enabled: boolean
   glm_coding_plan: 'standard' | 'premium'
+  glm_week_reset_anchor_ms: number
   credential_queue_timeout: number
   validation_interval: number
   request_log_retention_days: number
@@ -193,6 +196,7 @@ export type SettingsPatch = Partial<{
   credential_queue_enabled: boolean | null
   credential_usage_balance_enabled: boolean | null
   glm_coding_plan: 'standard' | 'premium' | null
+  glm_week_reset_anchor_ms: number | null
   credential_queue_timeout: number | null
   validation_interval: number | null
   request_log_retention_days: number | null
@@ -335,6 +339,7 @@ export function projectSettings(value: unknown): SettingsDto {
       credential_queue_enabled: projectBoolean(values.credential_queue_enabled),
       credential_usage_balance_enabled: projectBoolean(values.credential_usage_balance_enabled),
       glm_coding_plan: projectEnum(values.glm_coding_plan, glmCodingPlans),
+      glm_week_reset_anchor_ms: projectSafeInteger(values.glm_week_reset_anchor_ms, { minimum: 0 }),
       credential_queue_timeout: projectSafeInteger(values.credential_queue_timeout, {
         minimum: 1,
         maximum: 600,

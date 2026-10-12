@@ -39,6 +39,7 @@ const (
 	SettingCredentialQueueTimeout           = "credential_queue_timeout"
 	SettingCredentialUsageBalance           = "credential_usage_balance_enabled"
 	SettingGlmCodingPlan                    = "glm_coding_plan"
+	SettingGlmWeekResetAnchorMS             = "glm_week_reset_anchor_ms"
 	SettingValidationInterval               = "validation_interval"
 	SettingRequestLogRetentionDays          = "request_log_retention_days"
 	SettingModelsDevAutoSyncEnabled         = "models_dev_auto_sync_enabled"
@@ -120,6 +121,9 @@ type RuntimeSettings struct {
 	CredentialQueueTimeout           time.Duration
 	CredentialUsageBalance           bool
 	GlmCodingPlan                    GlmCodingPlan
+	// GlmWeekResetAnchorMS 是官方周周期重置锚点(epoch 毫秒, UTC+8 时区语义由使用者保证)。
+	// 周窗口 = 最近一次锚点 + 7 天整数倍; 0 表示退化为滚动 7 天窗口。
+	GlmWeekResetAnchorMS int64
 	ValidationInterval               time.Duration
 	RequestLogRetentionDays          int
 	ModelsDevAutoSyncEnabled         bool
@@ -159,6 +163,7 @@ func DefaultRuntimeSettings() RuntimeSettings {
 		CredentialQueueTimeout:     time.Duration(defaultCredentialQueueTimeout) * time.Second,
 		CredentialUsageBalance:     false,
 		GlmCodingPlan:              GlmPlanStandard,
+		GlmWeekResetAnchorMS:       0,
 		ValidationInterval:         10 * time.Minute,
 		RequestLogRetentionDays:    defaultRequestLogRetentionDays,
 		ModelsDevAutoSyncEnabled:   true,
@@ -188,6 +193,7 @@ func IsRuntimeSettingKey(key string) bool {
 		SettingCredentialQueueTimeout,
 		SettingCredentialUsageBalance,
 		SettingGlmCodingPlan,
+		SettingGlmWeekResetAnchorMS,
 		SettingValidationInterval,
 		SettingRequestLogRetentionDays,
 		SettingModelsDevAutoSyncEnabled:
@@ -334,6 +340,12 @@ func ResolveRuntimeSettings(settings config.Settings) (RuntimeSettings, error) {
 				return RuntimeSettings{}, err
 			}
 			resolved.GlmCodingPlan = parsed
+		case SettingGlmWeekResetAnchorMS:
+			anchor, err := nonNegativeWholeNumber(key, value)
+			if err != nil {
+				return RuntimeSettings{}, err
+			}
+			resolved.GlmWeekResetAnchorMS = int64(anchor)
 		case SettingValidationInterval:
 			seconds, err := positiveWholeSeconds(key, value)
 			if err != nil {
@@ -509,6 +521,9 @@ func ValidateRuntimeSetting(key string, value any) error {
 		return err
 	case SettingGlmCodingPlan:
 		_, err := parseGlmCodingPlan(value)
+		return err
+	case SettingGlmWeekResetAnchorMS:
+		_, err := nonNegativeWholeNumber(key, value)
 		return err
 	case SettingRequestLogRetentionDays:
 		_, err := wholeNumberInRange(

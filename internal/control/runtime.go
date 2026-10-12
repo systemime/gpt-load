@@ -47,7 +47,7 @@ type credentialStageCleaner interface {
 // credentialUsageReader 由 requestlog.Service 实现: 聚合滚动窗口用量,
 // 供用量均衡(阶段 3)的后台刷新循环写入注册表 tracker。
 type credentialUsageReader interface {
-	CredentialWindowUsage(context.Context) (map[uint]state.CredentialUsage, error)
+	CredentialWindowUsage(context.Context, int64) (map[uint]state.CredentialUsage, error)
 }
 
 type runtimeTicker interface {
@@ -187,7 +187,12 @@ func (runtime *Runtime) Run(ctx context.Context) {
 func (runtime *Runtime) runCredentialUsage(ctx context.Context, ticker runtimeTicker) {
 	defer func() { ticker.Stop() }()
 	refresh := func() {
-		usage, err := runtime.usageReader.CredentialWindowUsage(ctx)
+		// 周窗口锚点来自运行时设置; 0 表示滚动 7 天。
+		var weekAnchorMS int64
+		if snapshot := runtime.manager.Current(); snapshot != nil {
+			weekAnchorMS = snapshot.Settings.GlmWeekResetAnchorMS
+		}
+		usage, err := runtime.usageReader.CredentialWindowUsage(ctx, weekAnchorMS)
 		if err != nil {
 			if ctx.Err() == nil {
 				logrus.WithError(err).Warn("Refresh credential window usage failed")

@@ -71,6 +71,7 @@ type SettingsValuesResponse struct {
 	CredentialQueueEnabled           bool                  `json:"credential_queue_enabled"`
 	CredentialUsageBalance           bool                  `json:"credential_usage_balance_enabled"`
 	GlmCodingPlan                    state.GlmCodingPlan   `json:"glm_coding_plan"`
+	GlmWeekResetAnchorMS             int64                 `json:"glm_week_reset_anchor_ms"`
 	CredentialQueueTimeout           int64                 `json:"credential_queue_timeout"`
 	ValidationInterval               int64                 `json:"validation_interval"`
 	RequestLogRetentionDays          int                   `json:"request_log_retention_days"`
@@ -490,6 +491,7 @@ func mapSettingsResponse(
 			CredentialQueueEnabled:           settings.CredentialQueueEnabled,
 			CredentialUsageBalance:           settings.CredentialUsageBalance,
 			GlmCodingPlan:                    settings.GlmCodingPlan,
+			GlmWeekResetAnchorMS:             settings.GlmWeekResetAnchorMS,
 			CredentialQueueTimeout:           durationSeconds(settings.CredentialQueueTimeout),
 			ValidationInterval:               durationSeconds(settings.ValidationInterval),
 			RequestLogRetentionDays:          settings.RequestLogRetentionDays,
