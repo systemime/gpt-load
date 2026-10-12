@@ -66,18 +66,23 @@ type credentialLoadGroupItem struct {
 	Windows map[string]credentialLoadWindowStats `json:"windows"`
 }
 
+// credentialLoadPlan 套餐档位与团队积分水位, 嵌套对象形状与前端解析一致。
+type credentialLoadPlan struct {
+	Plan           string  `json:"plan"`
+	QuotaCredits5h float64 `json:"quota_credits_5h"`
+	QuotaCredits7d float64 `json:"quota_credits_7d"`
+	TeamCredits5h  float64 `json:"team_credits_5h"`
+	TeamCredits7d  float64 `json:"team_credits_7d"`
+}
+
 type credentialLoadResponse struct {
-	ObservedAtMS    int64                         `json:"observed_at_ms"`
-	Cap             int                           `json:"cap"`
-	Plan            string                        `json:"plan"`
-	QuotaCredits5h  float64                       `json:"quota_credits_5h"`
-	QuotaCredits7d  float64                       `json:"quota_credits_7d"`
-	TeamCredits5h   float64                       `json:"team_credits_5h"`
-	TeamCredits7d   float64                       `json:"team_credits_7d"`
-	Credentials     []credentialLoadItem          `json:"credentials"`
-	AccessKeys      []credentialLoadAccessKeyItem `json:"access_keys"`
-	Groups          []credentialLoadGroupItem     `json:"groups"`
-	LocalRejects    map[string]int64              `json:"local_rejects"`
+	ObservedAtMS int64                         `json:"observed_at_ms"`
+	Cap          int                           `json:"cap"`
+	Plan         credentialLoadPlan            `json:"plan"`
+	Credentials  []credentialLoadItem          `json:"credentials"`
+	AccessKeys   []credentialLoadAccessKeyItem `json:"access_keys"`
+	Groups       []credentialLoadGroupItem     `json:"groups"`
+	LocalRejects map[string]int64              `json:"local_rejects"`
 }
 
 var credentialLoadErrorCategories = map[string]string{
@@ -171,9 +176,11 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 	result := credentialLoadResponse{
 		ObservedAtMS: observedAt,
 		Cap:          capacity,
-		Plan:         string(plan),
-		QuotaCredits5h: quota5h,
-		QuotaCredits7d: quota7d,
+		Plan: credentialLoadPlan{
+			Plan:           string(plan),
+			QuotaCredits5h: quota5h,
+			QuotaCredits7d: quota7d,
+		},
 		Credentials:  make([]credentialLoadItem, 0, len(views)),
 		AccessKeys:   credentialLoadAccessKeyItems(accessKeyNames, accessKeyWindows),
 		Groups:       credentialLoadGroupItems(groupNames, groupWindows),
@@ -181,8 +188,8 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 	}
 	for _, view := range views {
 		usage := usageSnapshot[view.ID]
-		result.TeamCredits5h += usage.Credits5h
-		result.TeamCredits7d += usage.Credits7d
+		result.Plan.TeamCredits5h += usage.Credits5h
+		result.Plan.TeamCredits7d += usage.Credits7d
 		item := credentialLoadItem{
 			ID: view.ID, Name: names[view.ID], Status: string(view.Status),
 			Inflight: slots.Inflight(view.ID),
