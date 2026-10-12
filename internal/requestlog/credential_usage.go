@@ -19,20 +19,23 @@ func (service *Service) CredentialWindowUsage(ctx context.Context, weekAnchorMS 
 	defaultWeekStart := weekStartFor(nowMS, weekAnchorMS)
 
 	// 凭证级锚点覆盖: 每个不同窗口单独聚合(组数 = 不同锚点数, 通常 0~2)。
-	anchors := make(map[uint]int64, 8)
+	anchorRows := make([]struct {
+		ID     uint   `gorm:"column:id"`
+		Anchor int64  `gorm:"column:week_reset_anchor_ms"`
+	}, 0, 8)
 	if err := service.db.WithContext(ctx).
 		Table("credentials").
 		Select("id, week_reset_anchor_ms").
 		Where("week_reset_anchor_ms IS NOT NULL AND week_reset_anchor_ms > 0").
-		Scan(&anchors).Error; err != nil {
+		Scan(&anchorRows).Error; err != nil {
 		return nil, err
 	}
 	overrideStarts := make(map[int64][]uint, 4)
-	for id, anchor := range anchors {
-		start := weekStartFor(nowMS, anchor)
-		overrideStarts[start] = append(overrideStarts[start], id)
+	for _, row := range anchorRows {
+		start := weekStartFor(nowMS, row.Anchor)
+		overrideStarts[start] = append(overrideStarts[start], row.ID)
 	}
-	overridden := make([]uint, 0, len(anchors))
+	overridden := make([]uint, 0, len(anchorRows))
 	for _, ids := range overrideStarts {
 		overridden = append(overridden, ids...)
 	}
