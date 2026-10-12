@@ -71,6 +71,9 @@ type Credential struct {
 	Status              CredentialStatus    `gorm:"type:varchar(32);not null;default:'active';check:chk_credential_status,status IN ('active','disabled')"`
 	WeightManual        *int
 	ConcurrencyLimit    *int    `gorm:"column:concurrency_limit;check:chk_credential_concurrency_limit,concurrency_limit IS NULL OR (concurrency_limit >= 0 AND concurrency_limit <= 64)"`
+	// WeekResetAnchorMS 为该凭据独立的官方周周期重置锚点(epoch 毫秒);
+	// NULL/0 表示跟随全局 glm_week_reset_anchor_ms。席位单独下单/换绑时使用。
+	WeekResetAnchorMS *int64 `gorm:"column:week_reset_anchor_ms"`
 	ProxyConfig         *string `gorm:"column:proxy_config;type:text"`
 	Group               *Group  `gorm:"foreignKey:GroupID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
 	CreatedAtMS         int64   `gorm:"column:created_at_ms;not null;autoCreateTime:milli;check:chk_credential_created_at,created_at_ms >= 0"`
