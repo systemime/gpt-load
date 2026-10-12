@@ -88,6 +88,7 @@ export default {
       dailyTitle: '每日用量（按人堆叠）',
       trendTitle: '每日总量趋势',
       tableTitle: '明细汇总',
+      credentialsTitle: '厂商消耗（按凭证）',
       ranges: { all: '全部', '30d': '近 30 天', '7d': '近 7 天' },
       filters: {
         from: '开始日期',
@@ -107,6 +108,9 @@ export default {
         input: '输入 tok',
         output: '输出 tok',
         cacheRead: '缓存读',
+        credential: '凭证',
+        successRate: '成功率',
+        tokens: 'Token',
       },
     },
 

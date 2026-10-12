@@ -88,6 +88,7 @@ export default {
       dailyTitle: '日次使用量（ユーザー別積み上げ）',
       trendTitle: '日次合計トレンド',
       tableTitle: '詳細サマリー',
+      credentialsTitle: 'プロバイダー別消費',
       ranges: { all: '全期間', '30d': '直近 30 日', '7d': '直近 7 日' },
       filters: {
         from: '開始日',
@@ -107,6 +108,9 @@ export default {
         input: '入力 tok',
         output: '出力 tok',
         cacheRead: 'キャッシュ読取',
+        credential: '認証情報',
+        successRate: '成功率',
+        tokens: 'トークン',
       },
     },
 

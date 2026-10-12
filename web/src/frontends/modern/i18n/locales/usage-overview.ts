@@ -19,6 +19,9 @@ export const zhCN = {
   dailyTitle: '每日用量（按人堆叠）',
   trendTitle: '每日总量趋势',
   tableTitle: '明细汇总',
+  credentialsTitle: '厂商消耗（按凭证）',
+  credential: '凭证',
+  successRate: '成功率',
   metrics: { requests: '请求数', tokens: 'Token' },
 }
 
@@ -43,6 +46,9 @@ export const enUS = {
   dailyTitle: 'Daily usage (stacked by person)',
   trendTitle: 'Daily total trend',
   tableTitle: 'Detail summary',
+  credentialsTitle: 'Consumption by provider credential',
+  credential: 'Credential',
+  successRate: 'Success rate',
   metrics: { requests: 'Requests', tokens: 'Tokens' },
 }
 
@@ -67,5 +73,8 @@ export const jaJP = {
   dailyTitle: '日次使用量（ユーザー別積み上げ）',
   trendTitle: '日次合計トレンド',
   tableTitle: '詳細サマリー',
+  credentialsTitle: 'プロバイダー別消費',
+  credential: '認証情報',
+  successRate: '成功率',
   metrics: { requests: 'リクエスト', tokens: 'トークン' },
 }

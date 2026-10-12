@@ -21,10 +21,17 @@ type usageOverviewPerson struct {
 	Totals      requestlog.AccessKeyUsageTotals `json:"totals"`
 }
 
+type usageOverviewCredential struct {
+	CredentialID uint                            `json:"credential_id"`
+	Name         string                          `json:"name"`
+	Totals       requestlog.AccessKeyUsageTotals `json:"totals"`
+}
+
 type usageOverviewResponse struct {
 	ObservedAtMS int64                            `json:"observed_at_ms"`
 	Filter       usageOverviewFilterResponse      `json:"filter"`
 	People       []usageOverviewPerson            `json:"people"`
+	Credentials  []usageOverviewCredential        `json:"credentials"`
 	Series       []requestlog.AccessKeyUsagePoint `json:"series"`
 }
 
@@ -57,14 +64,20 @@ func (server *Server) handleUsageOverview(c *gin.Context) {
 		writeServiceError(c, "usage_overview", err)
 		return
 	}
+	credentialNames, err := server.service.credentialNames(c)
+	if err != nil {
+		writeServiceError(c, "usage_overview", err)
+		return
+	}
 	result := usageOverviewResponse{
 		ObservedAtMS: overview.ObservedAtMS,
 		Filter: usageOverviewFilterResponse{
 			FromMS: overview.Filter.FromMS, ToMS: overview.Filter.ToMS,
 			GroupID: overview.Filter.GroupID, AccessKeyID: overview.Filter.AccessKeyID,
 		},
-		People: make([]usageOverviewPerson, 0, len(overview.Totals)),
-		Series: overview.Series,
+		People:      make([]usageOverviewPerson, 0, len(overview.Totals)),
+		Credentials: make([]usageOverviewCredential, 0, len(overview.Credentials)),
+		Series:      overview.Series,
 	}
 	for id, totals := range overview.Totals {
 		result.People = append(result.People, usageOverviewPerson{
@@ -72,6 +85,17 @@ func (server *Server) handleUsageOverview(c *gin.Context) {
 		})
 	}
 	sortPeople(result.People)
+	for id, totals := range overview.Credentials {
+		result.Credentials = append(result.Credentials, usageOverviewCredential{
+			CredentialID: id, Name: credentialNames[id], Totals: totals,
+		})
+	}
+	sort.Slice(result.Credentials, func(i, j int) bool {
+		if result.Credentials[i].Totals.Requests != result.Credentials[j].Totals.Requests {
+			return result.Credentials[i].Totals.Requests > result.Credentials[j].Totals.Requests
+		}
+		return result.Credentials[i].CredentialID < result.Credentials[j].CredentialID
+	})
 	c.Header("Cache-Control", "no-store")
 	response.SuccessI18n(c, "common.success", result)
 }

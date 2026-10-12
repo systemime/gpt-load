@@ -20,6 +20,12 @@ export interface UsageOverviewPerson {
   }
 }
 
+export interface UsageOverviewCredential {
+  credential_id: number
+  name: string
+  totals: UsageOverviewPerson['totals']
+}
+
 export interface UsageOverviewPoint {
   access_key_id: number
   day_ms: number
@@ -38,6 +44,7 @@ export interface UsageOverviewFilters {
 export interface UsageOverviewReport {
   observed_at_ms: number
   people: UsageOverviewPerson[]
+  credentials: UsageOverviewCredential[]
   series: UsageOverviewPoint[]
 }
 
@@ -49,8 +56,9 @@ const totalsFields = [
   'cache_read_tokens',
 ] as const
 const personFields = ['access_key_id', 'name', 'totals'] as const
+const credentialFields = ['credential_id', 'name', 'totals'] as const
 const pointFields = ['access_key_id', 'day_ms', 'requests', 'success', 'tokens'] as const
-const reportFields = ['observed_at_ms', 'filter', 'people', 'series'] as const
+const reportFields = ['observed_at_ms', 'filter', 'people', 'credentials', 'series'] as const
 
 function projectTotals(value: unknown): UsageOverviewPerson['totals'] {
   const record = projectRecord(value)
@@ -74,6 +82,15 @@ export function projectUsageOverview(value: unknown): UsageOverviewReport {
       assertNoSecretLikeFields(row, personFields)
       return {
         access_key_id: projectSafeInteger(row.access_key_id, { minimum: 1 }),
+        name: projectString(row.name, { allowEmpty: true }),
+        totals: projectTotals(row.totals),
+      }
+    }),
+    credentials: projectArray(record.credentials ?? [], (item): UsageOverviewCredential => {
+      const row = projectRecord(item)
+      assertNoSecretLikeFields(row, credentialFields)
+      return {
+        credential_id: projectSafeInteger(row.credential_id, { minimum: 1 }),
         name: projectString(row.name, { allowEmpty: true }),
         totals: projectTotals(row.totals),
       }

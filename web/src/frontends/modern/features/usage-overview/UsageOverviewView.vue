@@ -7,6 +7,7 @@ import {
   getGroupOptionsLite,
   getUsageOverview,
   type UsageOverviewPerson,
+  type UsageOverviewTotals,
 } from '@modern/api/usage-overview'
 import { useApiClient } from '@shared/http/client-context'
 import { usePageRefresh } from '@modern/app/page-refresh'
@@ -113,6 +114,8 @@ const people = computed(() => {
   const list = report.value?.people ?? []
   return [...list].sort((left, right) => personMetric(right) - personMetric(left))
 })
+// 厂商凭证维度: 后端已按请求降序, token 合计含缓存读写。
+const credentials = computed(() => report.value?.credentials ?? [])
 const personNames = computed(() => {
   const names = new Map<number, string>()
   for (const person of people.value) {
@@ -141,6 +144,10 @@ function formatCompact(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
   return String(value)
+}
+
+function successRate(totals: UsageOverviewTotals): string {
+  return totals.requests > 0 ? `${Math.round((totals.success / totals.requests) * 100)}%` : '—'
 }
 
 // ---------- 悬浮提示 ----------
@@ -568,6 +575,28 @@ function onTrendLeave(): void {
             </div>
           </div>
         </section>
+
+        <section v-if="credentials.length > 0" class="modern-usage-overview__card">
+          <h3>{{ t('usageOverview.credentialsTitle') }}</h3>
+          <div class="modern-usage-overview__table modern-usage-overview__table--credentials" role="table">
+            <div class="modern-usage-overview__row modern-usage-overview__row--head" role="row">
+              <span role="columnheader">{{ t('usageOverview.credential') }}</span>
+              <span role="columnheader" class="modern-credential-load__num">{{ t('usageOverview.requests') }}</span>
+              <span role="columnheader" class="modern-credential-load__num">{{ t('usageOverview.successRate') }}</span>
+              <span role="columnheader" class="modern-credential-load__num">{{ t('usageOverview.tokens') }}</span>
+              <span role="columnheader" class="modern-credential-load__num">{{ t('usageOverview.cacheRead') }}</span>
+            </div>
+            <div v-for="credential in credentials" :key="credential.id" class="modern-usage-overview__row" role="row">
+              <span role="cell" class="modern-usage-overview__name">{{ credential.name || `#${credential.id}` }}</span>
+              <span role="cell" class="modern-credential-load__num">{{ formatCompact(credential.totals.requests) }}</span>
+              <span role="cell" class="modern-credential-load__num">{{ successRate(credential.totals) }}</span>
+              <span role="cell" class="modern-credential-load__num">
+                {{ formatCompact(credential.totals.uncachedInputTokens + credential.totals.outputTokens + credential.totals.cacheReadTokens) }}
+              </span>
+              <span role="cell" class="modern-credential-load__num">{{ formatCompact(credential.totals.cacheReadTokens) }}</span>
+            </div>
+          </div>
+        </section>
       </template>
     </template>
     <div
@@ -736,5 +765,10 @@ function onTrendLeave(): void {
 /* 数值列单元格右对齐, 表头同步右对齐, 否则宽列下表头在左、数值在右, 看起来像空列 */
 .modern-usage-overview__row--head span:not(:first-child) {
   text-align: right;
+}
+
+/* 厂商消耗表: 5 列(凭证 + 4 数值) */
+.modern-usage-overview__table--credentials .modern-usage-overview__row {
+  grid-template-columns: 1.4fr repeat(4, 1fr);
 }
 </style>

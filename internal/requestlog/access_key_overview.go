@@ -36,10 +36,12 @@ type AccessKeyOverviewFilter struct {
 }
 
 // AccessKeyOverview 汇总筛选范围内每人累计, 以及按日序列。
+// Credentials 是同一筛选范围内的厂商凭证(credential_id)维度聚合, 形状与人相同。
 type AccessKeyOverview struct {
 	ObservedAtMS int64
 	Filter       AccessKeyOverviewFilter
 	Totals       map[uint]AccessKeyUsageTotals
+	Credentials  map[uint]AccessKeyUsageTotals
 	Series       []AccessKeyUsagePoint
 }
 
@@ -58,6 +60,7 @@ func (service *Service) AccessKeyUsageOverview(
 		ObservedAtMS: observedAt,
 		Filter:       filter,
 		Totals:       map[uint]AccessKeyUsageTotals{},
+		Credentials:  map[uint]AccessKeyUsageTotals{},
 	}
 	scope := func(query *gorm.DB) *gorm.DB {
 		if filter.FromMS > 0 {
@@ -96,6 +99,37 @@ SUM(cache_read_tokens) AS cache_read_tokens`).
 	}
 	for _, row := range totalRows {
 		overview.Totals[row.AccessKeyID] = AccessKeyUsageTotals{
+			Requests: row.Requests, Success: row.Success,
+			UncachedInputTokens: row.UncachedInputTokens,
+			OutputTokens:        row.OutputTokens,
+			CacheReadTokens:     row.CacheReadTokens,
+		}
+	}
+
+	credRows := make([]struct {
+		CredentialID        uint  `gorm:"column:credential_id"`
+		Requests            int64 `gorm:"column:requests"`
+		Success             int64 `gorm:"column:success"`
+		UncachedInputTokens int64 `gorm:"column:uncached_input_tokens"`
+		OutputTokens        int64 `gorm:"column:output_tokens"`
+		CacheReadTokens     int64 `gorm:"column:cache_read_tokens"`
+	}, 0, 16)
+	if err := scope(service.db.WithContext(ctx).Table("usage_stats")).
+		Select(`credential_id,
+SUM(request_count) AS requests,
+SUM(success_count) AS success,
+SUM(uncached_input_tokens) AS uncached_input_tokens,
+SUM(output_tokens) AS output_tokens,
+SUM(cache_read_tokens) AS cache_read_tokens`).
+		Group("credential_id").
+		Scan(&credRows).Error; err != nil {
+		return AccessKeyOverview{}, err
+	}
+	for _, row := range credRows {
+		if row.CredentialID == 0 {
+			continue // 本地拒绝等未归属凭证的桶
+		}
+		overview.Credentials[row.CredentialID] = AccessKeyUsageTotals{
 			Requests: row.Requests, Success: row.Success,
 			UncachedInputTokens: row.UncachedInputTokens,
 			OutputTokens:        row.OutputTokens,

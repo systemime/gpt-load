@@ -88,6 +88,7 @@ export default {
       dailyTitle: 'Daily usage (stacked by person)',
       trendTitle: 'Daily total trend',
       tableTitle: 'Detail summary',
+      credentialsTitle: 'Consumption by provider credential',
       ranges: { all: 'All time', '30d': 'Last 30 days', '7d': 'Last 7 days' },
       filters: {
         from: 'From',
@@ -107,6 +108,9 @@ export default {
         input: 'Input tok',
         output: 'Output tok',
         cacheRead: 'Cache read',
+        credential: 'Credential',
+        successRate: 'Success rate',
+        tokens: 'Tokens',
       },
     },
 

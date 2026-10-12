@@ -18,6 +18,12 @@ export interface UsageOverviewPerson {
   totals: UsageOverviewTotals
 }
 
+export interface UsageOverviewCredential {
+  id: number
+  name: string
+  totals: UsageOverviewTotals
+}
+
 export interface UsageOverviewPoint {
   accessKeyID: number
   dayMS: number
@@ -36,6 +42,7 @@ export interface UsageOverviewFilters {
 export interface UsageOverviewReport {
   observedAt: number
   people: UsageOverviewPerson[]
+  credentials: UsageOverviewCredential[]
   points: UsageOverviewPoint[]
 }
 
@@ -71,6 +78,14 @@ export function readUsageOverview(value: unknown): UsageOverviewReport {
         id: integer(person.access_key_id, 1),
         name: text(person.name),
         totals: readTotals(person.totals),
+      }
+    }),
+    credentials: list(row.credentials ?? []).map((item) => {
+      const credential = record(item)
+      return {
+        id: integer(credential.credential_id, 1),
+        name: text(credential.name),
+        totals: readTotals(credential.totals),
       }
     }),
     points: list(row.series).map(readPoint),

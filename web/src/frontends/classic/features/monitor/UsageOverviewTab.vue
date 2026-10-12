@@ -78,6 +78,8 @@ const people = computed(() => {
   const list = report.value?.people ?? []
   return [...list].sort((left, right) => personMetric(right) - personMetric(left))
 })
+// 厂商凭证维度: 后端已按请求降序。
+const credentials = computed(() => report.value?.credentials ?? [])
 const personNames = computed(() => {
   const names = new Map<number, string>()
   for (const person of people.value) {
@@ -477,6 +479,30 @@ function refresh(): Promise<void> {
             </div>
           </div>
         </section>
+
+        <section v-if="credentials.length > 0" class="usage-overview__card">
+          <h3>{{ t('monitor.usageOverview.credentialsTitle') }}</h3>
+          <div class="usage-overview__table usage-overview__table--credentials" role="table">
+            <div class="usage-overview__row usage-overview__row--head" role="row">
+              <span role="columnheader">{{ t('monitor.usageOverview.columns.credential') }}</span>
+              <span role="columnheader" class="usage-overview__num">{{ t('monitor.usageOverview.columns.requests') }}</span>
+              <span role="columnheader" class="usage-overview__num">{{ t('monitor.usageOverview.columns.successRate') }}</span>
+              <span role="columnheader" class="usage-overview__num">{{ t('monitor.usageOverview.columns.tokens') }}</span>
+              <span role="columnheader" class="usage-overview__num">{{ t('monitor.usageOverview.columns.cacheRead') }}</span>
+            </div>
+            <div v-for="credential in credentials" :key="credential.credential_id" class="usage-overview__row" role="row">
+              <span role="cell" class="usage-overview__name">{{ credential.name || `#${credential.credential_id}` }}</span>
+              <span role="cell" class="usage-overview__num">{{ formatInteger(credential.totals.requests, locale) }}</span>
+              <span role="cell" class="usage-overview__num">
+                {{ credential.totals.requests > 0 ? `${Math.round((credential.totals.success / credential.totals.requests) * 100)}%` : '—' }}
+              </span>
+              <span role="cell" class="usage-overview__num">
+                {{ formatCompact(credential.totals.uncached_input_tokens + credential.totals.output_tokens + credential.totals.cache_read_tokens) }}
+              </span>
+              <span role="cell" class="usage-overview__num">{{ formatCompact(credential.totals.cache_read_tokens) }}</span>
+            </div>
+          </div>
+        </section>
       </template>
     </template>
   </div>
@@ -646,6 +672,11 @@ function refresh(): Promise<void> {
 .usage-overview__row span:not(:first-child) {
   font-family: var(--font-mono);
   text-align: right;
+}
+
+/* 厂商消耗表: 5 列(凭证 + 4 数值) */
+.usage-overview__table--credentials .usage-overview__row {
+  grid-template-columns: 1.4fr repeat(4, 1fr);
 }
 
 .usage-overview__name {
