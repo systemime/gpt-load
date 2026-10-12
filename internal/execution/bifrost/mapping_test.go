@@ -53,6 +53,16 @@ func TestPassthroughHTTPErrorProducesNeutralFailureHints(t *testing.T) {
 		{
 			name: "OpenAI rate limit", status: http.StatusBadRequest,
 			body: `{"error":{"type":"rate_limit_error","code":"quota_exceeded"}}`,
+			want: execution.FailureHintRateLimited, scope: execution.ErrorScopeCredential,
+		},
+		{
+			name: "GLM coding plan quota exhausted", status: http.StatusTooManyRequests,
+			body: `{"error":{"code":"1113","message":"当前调用额度已用尽，请检查套餐余额"}}`,
+			want: execution.FailureHintRateLimited, scope: execution.ErrorScopeCredential,
+		},
+		{
+			name: "plain rate limit stays unscoped", status: http.StatusTooManyRequests,
+			body: `{"error":{"message":"Rate limit reached for requests","type":"rate_limit_error","code":"rate_limit_exceeded"}}`,
 			want: execution.FailureHintRateLimited,
 		},
 		{

@@ -259,9 +259,11 @@ func passthroughHTTPError(status int, headers http.Header, body []byte, secrets 
 	typeValue = sanitizeEvidenceValue(typeValue, secrets)
 	codeValue = sanitizeEvidenceValue(codeValue, secrets)
 	requestID := upstreamRequestID(headers)
+	hint, scope := httpFailureClassification(status, body)
 	evidence := &execution.ErrorEvidence{
 		Kind:       execution.ErrorKindHTTP,
-		Hint:       failureHintFromHTTP(status, body),
+		Hint:       hint,
+		ScopeHint:  scope,
 		StatusCode: status,
 		Type:       typeValue,
 		Code:       codeValue,
@@ -275,6 +277,14 @@ func passthroughHTTPError(status int, headers http.Header, body []byte, secrets 
 }
 
 func failureHintFromHTTP(status int, body []byte) execution.FailureHint {
+	hint, _ := httpFailureClassification(status, body)
+	return hint
+}
+
+// httpFailureClassification 在中性提示之外补齐限流错误的凭证范围:
+// 配额/额度耗尽(如 GLM coding plan 5h/周额度)绑定单个凭证, 应冷却该凭证并
+// 由调度器无感切换到下一候选, 而非把 429 透传给用户。
+func httpFailureClassification(status int, body []byte) (execution.FailureHint, execution.ErrorScope) {
 	var payload struct {
 		Error struct {
 			Type    json.RawMessage `json:"type"`
@@ -284,13 +294,23 @@ func failureHintFromHTTP(status int, body []byte) execution.FailureHint {
 		} `json:"error"`
 	}
 	_ = json.Unmarshal(body, &payload)
-	return neutralFailureHint(
-		status,
+	values := []string{
 		evidenceScalar(payload.Error.Type),
 		evidenceScalar(payload.Error.Code),
 		evidenceScalar(payload.Error.Status),
 		payload.Error.Message,
-	)
+	}
+	return neutralFailureHint(status, values...), credentialQuotaScope(values...)
+}
+
+// credentialQuotaScope 只认配额耗尽类文案; 普通限流(并发/速率)保持范围待定,
+// 由 judge 按操作语义处理。
+func credentialQuotaScope(values ...string) execution.ErrorScope {
+	if containsAnyMarker(strings.ToLower(strings.Join(values, " ")),
+		"quota", "额度", "配额", "用尽", "用完", "余额不足", "resource_exhausted") {
+		return execution.ErrorScopeCredential
+	}
+	return ""
 }
 
 func neutralFailureHint(status int, values ...string) execution.FailureHint {
@@ -681,6 +701,7 @@ func errorEvidence(
 	evidence := &execution.ErrorEvidence{
 		Kind:       kind,
 		Hint:       neutralFailureHint(status, typeValue, codeValue, messageValue),
+		ScopeHint:  credentialQuotaScope(typeValue, codeValue, messageValue),
 		StatusCode: evidenceStatus,
 		Type:       typeValue,
 		Code:       codeValue,
