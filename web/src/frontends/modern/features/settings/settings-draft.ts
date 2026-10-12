@@ -4,6 +4,7 @@ import {
   settingKeys,
   settingNumbers,
   type CORSConfig,
+  type GlmCodingPlan,
   type SettingKey,
   type SettingNumber,
   type SettingSwitch,
@@ -49,6 +50,8 @@ export type SettingsDraft = Record<SettingNumber, string> &
   Record<SettingSwitch, boolean> & {
     codex_live_mode: CodexLiveMode
     route_strategy: RouteStrategy
+    glm_coding_plan: GlmCodingPlan
+    glm_week_reset_anchor_ms: string
     header_rules: HeaderRow[]
     response_header_rules: HeaderRow[]
     cors: CORSDraft

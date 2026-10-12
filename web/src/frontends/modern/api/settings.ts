@@ -32,6 +32,7 @@ export const settingNumbers = {
   credential_queue_timeout: { min: 1, max: 600, unit: 'seconds' },
   validation_interval: { min: 1, max: 9_223_372_036, unit: 'seconds' },
   request_log_retention_days: { min: 1, max: 365, unit: 'days' },
+  glm_week_reset_anchor_ms: { min: 0, max: Number.MAX_SAFE_INTEGER, unit: 'times' },
 } as const
 export type SettingNumber = keyof typeof settingNumbers
 export const settingSwitches = [
@@ -68,6 +69,8 @@ export type SettingsValues = Record<SettingNumber, number> &
   Record<SettingSwitch, boolean> & {
     codex_live_mode: CodexLiveMode
     route_strategy: RouteStrategy
+    glm_coding_plan: 'standard' | 'premium'
+    glm_week_reset_anchor_ms: number
     header_rules: HeaderRules
     response_header_rules: HeaderRules
     cors: CORSConfig
@@ -78,9 +81,12 @@ export type SettingsValues = Record<SettingNumber, number> &
     request_audit: AuditConfig
   }
 export type SettingKey = keyof SettingsValues
+export const glmCodingPlans = ['standard', 'premium'] as const
+export type GlmCodingPlan = (typeof glmCodingPlans)[number]
 export const settingKeys: readonly SettingKey[] = [
   'codex_live_mode',
   'route_strategy',
+  'glm_coding_plan',
   ...settingSwitches,
   ...(Object.keys(settingNumbers) as SettingNumber[]),
   'header_rules',
@@ -177,6 +183,8 @@ function readSettings(value: unknown): SettingsData {
       ...switches,
       codex_live_mode: oneOf(values.codex_live_mode, codexLiveModes),
       route_strategy: oneOf(values.route_strategy, routeStrategies),
+      glm_coding_plan: oneOf(values.glm_coding_plan, glmCodingPlans),
+      glm_week_reset_anchor_ms: integer(values.glm_week_reset_anchor_ms, 0),
       header_rules: readHeaders(values.header_rules),
       response_header_rules: readHeaders(values.response_header_rules),
       cors: readCORS(values.cors),
