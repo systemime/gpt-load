@@ -40,8 +40,7 @@ export default {
       statQueued: '待機',
       statRejects: 'ローカル拒否',
       statErrors: 'エラー（5h）',
-      statQuota5h: '5h クォータ',
-      statQuotaWeek: '週間クォータ',
+      creditsUnit: 'クレジット',
       keyActive: 'アクティブ',
       keyIdle: 'トラフィックなし',
       pressureHelp: '圧力 = 該当キーの実際使用シェア ÷ 重み目標シェア\n使用量は公式クレジット式に準拠: クレジット = (入力×係数 + キャッシュ読取×キャッシュ係数 + 出力×出力係数) ÷ 10000\nGLM-5.3 係数 6.9/1.7/24、GLM-5.3-Flash 2.3/0.56/8。オフピーク(月-金 14:00-18:00 UTC+8 以外)は半額\nキャッシュ命中率が高いほどクレジットは少なく、バランサーはキャッシュウォームな認証情報を優先。アフィニティセッションは優先',
@@ -71,6 +70,8 @@ export default {
         queued: '待機',
         errors: 'エラー',
         credits: '5h クレジット',
+        quota5h: '5h クォータ',
+        quotaWeek: '週間クォータ',
       },
       errors: {
         rateLimited: 'レート制限',

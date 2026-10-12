@@ -142,17 +142,16 @@ function pressureTone(pressure: number): 'ok' | 'warn' | 'high' {
   return 'ok'
 }
 
-// 团队积分额度水位: 共享池, 与套餐档位联动。
-const quotaRatio5h = computed(() =>
-  report.value && report.value.plan.quota_credits_5h > 0
-    ? report.value.plan.team_credits_5h / report.value.plan.quota_credits_5h
-    : 0,
-)
-const quotaRatio7d = computed(() =>
-  report.value && report.value.plan.quota_credits_7d > 0
-    ? report.value.plan.team_credits_7d / report.value.plan.quota_credits_7d
-    : 0,
-)
+// 每凭证独立额度水位(官方按席位限额): 5h 与周窗口各自对照套餐额度。
+function quotaPercent(credits: number, quota: number): number {
+  return quota > 0 ? Math.min(999, Math.round((credits / quota) * 100)) : 0
+}
+
+function quotaTone(ratio: number): 'ok' | 'warn' | 'high' {
+  if (ratio >= 0.9) return 'high'
+  if (ratio >= 0.7) return 'warn'
+  return 'ok'
+}
 
 const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: string }> = [
   { key: 'rate_limited', label: 'rateLimited' },
@@ -253,34 +252,6 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
             {{ formatInteger(totals.errors5h, locale) }}
           </span>
           <span class="credential-load__card-label">{{ t('monitor.credentials.statErrors') }}</span>
-        </div>
-        <div class="credential-load__card">
-          <span
-            class="credential-load__card-value"
-            :class="{
-              'credential-load__danger': quotaRatio5h >= 0.9,
-              'credential-load__warn': quotaRatio5h >= 0.7 && quotaRatio5h < 0.9,
-            }"
-          >
-            {{ Math.round(quotaRatio5h * 100) }}%
-          </span>
-          <span class="credential-load__card-label">
-            {{ t('monitor.credentials.statQuota5h') }} · {{ formatTokens(report.plan.team_credits_5h) }}/{{ formatTokens(report.plan.quota_credits_5h) }}
-          </span>
-        </div>
-        <div class="credential-load__card">
-          <span
-            class="credential-load__card-value"
-            :class="{
-              'credential-load__danger': quotaRatio7d >= 0.9,
-              'credential-load__warn': quotaRatio7d >= 0.7 && quotaRatio7d < 0.9,
-            }"
-          >
-            {{ Math.round(quotaRatio7d * 100) }}%
-          </span>
-          <span class="credential-load__card-label">
-            {{ t('monitor.credentials.statQuotaWeek') }} · {{ formatTokens(report.plan.team_credits_7d) }}/{{ formatTokens(report.plan.quota_credits_7d) }}
-          </span>
         </div>
       </div>
 
@@ -421,7 +392,8 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
                   'affinity',
                   'tokens',
                   'cacheRead',
-                  'credits',
+                  'quota5h',
+                  'quotaWeek',
                   'errors',
                 ]"
                 :key="column"
@@ -479,7 +451,34 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
                 {{ formatTokens(stats.uncached_input_tokens + stats.output_tokens) }}
               </span>
               <span role="cell" class="credential-load__number">{{ formatTokens(stats.cache_read_tokens) }}</span>
-              <span role="cell" class="credential-load__number">{{ Math.round(item.credits_5h) }}</span>
+              <span
+                role="cell"
+                class="credential-load__number credential-load__req"
+                :title="`${Math.round(item.credits_5h)} / ${report.plan.quota_credits_5h} ${t('monitor.credentials.creditsUnit')}`"
+              >
+                <span class="credential-load__bar" aria-hidden="true">
+                  <span
+                    class="credential-load__bar-fill"
+                    :class="`credential-load__bar-fill--${quotaTone(item.credits_5h / (report.plan.quota_credits_5h || 1))}`"
+                    :style="{ width: `${Math.min(100, quotaPercent(item.credits_5h, report.plan.quota_credits_5h))}%` }"
+                  ></span>
+                </span>
+                {{ quotaPercent(item.credits_5h, report.plan.quota_credits_5h) }}%
+              </span>
+              <span
+                role="cell"
+                class="credential-load__number credential-load__req"
+                :title="`${Math.round(item.credits_7d)} / ${report.plan.quota_credits_7d} ${t('monitor.credentials.creditsUnit')}`"
+              >
+                <span class="credential-load__bar" aria-hidden="true">
+                  <span
+                    class="credential-load__bar-fill"
+                    :class="`credential-load__bar-fill--${quotaTone(item.credits_7d / (report.plan.quota_credits_7d || 1))}`"
+                    :style="{ width: `${Math.min(100, quotaPercent(item.credits_7d, report.plan.quota_credits_7d))}%` }"
+                  ></span>
+                </span>
+                {{ quotaPercent(item.credits_7d, report.plan.quota_credits_7d) }}%
+              </span>
               <span
                 role="cell"
                 class="credential-load__number"
@@ -723,7 +722,7 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
 }
 
 .credential-load__table--creds .credential-load__row {
-  grid-template-columns: minmax(88px, 1.1fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) minmax(44px, 0.5fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) repeat(4, minmax(52px, 0.7fr)) minmax(52px, 0.6fr) minmax(44px, 0.5fr);
+  grid-template-columns: minmax(88px, 1.1fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) minmax(44px, 0.5fr) minmax(56px, 0.6fr) minmax(110px, 1.2fr) repeat(4, minmax(52px, 0.7fr)) minmax(88px, 1fr) minmax(88px, 1fr) minmax(44px, 0.5fr);
 }
 
 .credential-load__table--errors .credential-load__row {

@@ -40,8 +40,7 @@ export default {
       statQueued: '排队',
       statRejects: '本地拒绝',
       statErrors: '异常（5h）',
-      statQuota5h: '5h 额度',
-      statQuotaWeek: '周额度',
+      creditsUnit: '积分',
       keyActive: '活跃',
       keyIdle: '无流量',
       pressureHelp: '压力 = 该 key 实际用量份额 ÷ 该 key 权重目标份额\n用量按官方积分口径: 积分 = (输入×系数 + 缓存读×缓存系数 + 输出×输出系数) ÷ 10000\nGLM-5.3 系数 6.9/1.7/24, GLM-5.3-Flash 2.3/0.56/8; 非高峰(工作日 14:00-18:00 UTC+8 之外)半价\n缓存命中率越高积分越低, 均衡器自动偏向缓存热凭证; 亲和会话优先, 不受均衡影响',
@@ -71,6 +70,8 @@ export default {
         queued: '排队',
         errors: '异常',
         credits: '5h 积分',
+        quota5h: '5h 额度',
+        quotaWeek: '周额度',
       },
       errors: {
         rateLimited: '限流',
