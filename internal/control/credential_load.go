@@ -190,6 +190,10 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 		usage := usageSnapshot[view.ID]
 		result.Plan.TeamCredits5h += usage.Credits5h
 		result.Plan.TeamCredits7d += usage.Credits7d
+		itemWindows := windows[view.ID]
+		if itemWindows == nil {
+			itemWindows = emptyCredentialLoadWindows() // 窗口内无请求的凭证(如已禁用)
+		}
 		item := credentialLoadItem{
 			ID: view.ID, Name: names[view.ID], Status: string(view.Status),
 			Inflight: slots.Inflight(view.ID),
@@ -201,7 +205,7 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 			Pressure: pressures[view.ID],
 			Credits5h: usage.Credits5h,
 			Credits7d: usage.Credits7d,
-			Windows:  windows[view.ID],
+			Windows:  itemWindows,
 			Errors5h: errorCounts[view.ID],
 		}
 		result.Credentials = append(result.Credentials, item)
