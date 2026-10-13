@@ -1682,7 +1682,29 @@ func (handler *Handler) executeAttempts(
 		handler.completeReason(ginContext, recorder, reasonUpstreamRateLimited)
 		return
 	}
+	// 调度耗尽但全池在途满载(瞬时并发冲爆): 503 会变成用户可见报错, 改发
+	// 429 + Retry-After, 客户端自动退避重试, 排队闸门回收容量后即可成功。
+	// 仅当确实满载才替换; 真"无候选"(冷却/停用/权重 0)仍透传 503。
+	if snapshot.Settings.CredentialQueueEnabled && handler.allowedCredentialsAllAtCapacity(allowedCredentialRefs) {
+		handler.rejectQueued(ginContext, recorder, snapshot)
+		return
+	}
 	handler.completeReason(ginContext, recorder, reasonNoCandidate)
+}
+
+// allowedCredentialsAllAtCapacity 报告允许集合内每个凭证(不计空引用)是否都达到准入阈值。
+func (handler *Handler) allowedCredentialsAllAtCapacity(allowedCredentialRefs map[uint]state.CredentialRef) bool {
+	checked := 0
+	for id := range allowedCredentialRefs {
+		if id == 0 {
+			continue
+		}
+		checked++
+		if handler.credentialSlots.Available(id) {
+			return false
+		}
+	}
+	return checked > 0
 }
 
 func setCooldownRetryAfter(ctx *gin.Context, until, now time.Time) {
