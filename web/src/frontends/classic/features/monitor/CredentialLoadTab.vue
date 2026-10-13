@@ -51,7 +51,9 @@ const totals = computed(() => {
     },
     { requests: 0, success: 0, affinityHits: 0, tokens: 0, cacheRead: 0, inflight: 0, queued: 0, errors5h: 0 },
   )
-  const capacity = data.cap > 0 ? data.cap * data.credentials.length : 0
+  // 容量只统计可调度凭证; 已停用凭证不再参与准入, 计入会虚增总容量。
+  const capacity =
+    data.cap > 0 ? data.cap * data.credentials.filter((item) => item.status === 'active').length : 0
   return { ...stats, capacity, rejects: data.local_rejects[activeWindow.value] }
 })
 
