@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	gormsqlite "github.com/glebarez/sqlite"
+	gormsqlite "gorm.io/driver/sqlite"
 	gormmysql "gorm.io/driver/mysql"
 	gormpostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"

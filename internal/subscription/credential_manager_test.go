@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"gorm.io/driver/sqlite"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 

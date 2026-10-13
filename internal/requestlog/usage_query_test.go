@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	gormsqlite "github.com/glebarez/sqlite"
+	gormsqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
@@ -900,7 +900,7 @@ func createCorruptUsageStats(t *testing.T, db *gorm.DB, rows ...models.UsageStat
 func openUsageQueryWriterDB(t *testing.T, dsn string) (*gorm.DB, func()) {
 	t.Helper()
 	db, err := gorm.Open(
-		gormsqlite.Open(dsn+"?_pragma=busy_timeout(5000)"),
+		gormsqlite.Open(dsn+"?_busy_timeout=5000"),
 		&gorm.Config{Logger: logger.Default.LogMode(logger.Silent)},
 	)
 	if err != nil {

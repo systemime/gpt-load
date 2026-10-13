@@ -47,7 +47,7 @@ func TestOpenWithSourceManagedLocatesFileURIAndQueryRecoverySet(t *testing.T) {
 	}
 	databasePath := filepath.Join(dataDir, "uri database.db")
 	dsn := (&url.URL{Scheme: "file", Path: databasePath}).String() +
-		"?cache=shared&_pragma=synchronous(NORMAL)"
+		"?cache=shared&_synchronous=NORMAL"
 
 	db := openSourceDatabase(t, dsn, config.DatabaseSourceManaged)
 	writeSQLiteRecoverySet(t, db)

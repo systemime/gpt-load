@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	gormsqlite "github.com/glebarez/sqlite"
+	gormsqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
@@ -293,7 +293,7 @@ func holdRollbackJournalReadLock(t *testing.T, appDB *gorm.DB, dsn string) func(
 	}
 
 	blocker, err := gorm.Open(
-		gormsqlite.Open(dsn+"?_pragma=busy_timeout(1)"),
+		gormsqlite.Open(dsn+"?_busy_timeout=1"),
 		&gorm.Config{Logger: logger.Default.LogMode(logger.Silent)},
 	)
 	if err != nil {

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	gormsqlite "github.com/glebarez/sqlite"
+	gormsqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
@@ -34,8 +34,8 @@ func OpenMigrated(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(
 		gormsqlite.Open(
 			":memory:?_txlock=immediate"+
-				"&_pragma=foreign_keys(1)"+
-				"&_pragma=busy_timeout(5000)",
+				"&_foreign_keys=1"+
+				"&_busy_timeout=5000",
 		),
 		&gorm.Config{
 			Logger:         logger.Default.LogMode(logger.Silent),

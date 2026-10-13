@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	gormsqlite "github.com/glebarez/sqlite"
+	gormsqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )

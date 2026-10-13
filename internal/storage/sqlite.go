@@ -6,9 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
-	"github.com/glebarez/sqlite"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"gpt-load/internal/platform/config"
@@ -138,29 +139,15 @@ func withSQLiteRuntimeOptions(dsn string, fileBacked bool) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("open SQLite database: invalid DSN query: %w", err)
 	}
+	// mattn/go-sqlite3 不支持通用 _pragma; 运行时选项用其专用连接参数表达。
+	// 调用方自带同名参数一律覆盖, 保证运行时保障(txlock/foreign_keys/busy_timeout/WAL)恒生效。
 	query.Set("_txlock", "immediate")
-
-	pragmas := make([]string, 0, len(query["_pragma"])+3)
-	for _, pragma := range query["_pragma"] {
-		name := strings.ToLower(strings.TrimSpace(pragma))
-		if index := strings.IndexAny(name, "(="); index >= 0 {
-			name = strings.TrimSpace(name[:index])
-		}
-		switch name {
-		case "foreign_keys", "busy_timeout", "journal_mode":
-			continue
-		default:
-			pragmas = append(pragmas, pragma)
-		}
-	}
-	pragmas = append(pragmas,
-		"foreign_keys(1)",
-		fmt.Sprintf("busy_timeout(%d)", sqliteBusyTimeoutMS),
-	)
+	query.Set("_foreign_keys", "1")
+	query.Set("_busy_timeout", strconv.Itoa(sqliteBusyTimeoutMS))
 	if fileBacked {
-		pragmas = append(pragmas, "journal_mode(WAL)")
+		query.Set("_journal_mode", "WAL")
 	}
-	query["_pragma"] = pragmas
+	query.Del("_pragma")
 	return base + "?" + query.Encode(), nil
 }
 

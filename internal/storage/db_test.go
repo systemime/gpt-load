@@ -458,8 +458,8 @@ func assertSQLiteMemoryDatabase(t *testing.T, db *gorm.DB) {
 func TestOpenOverridesSQLiteRuntimeOptions(t *testing.T) {
 	t.Parallel()
 	dsn := filepath.Join(t.TempDir(), "runtime.db") +
-		"?_txlock=deferred&_pragma=foreign_keys(0)" +
-		"&_pragma=busy_timeout(1)&_pragma=journal_mode(DELETE)"
+		"?_txlock=deferred&_foreign_keys=0" +
+		"&_busy_timeout=1&_journal_mode=DELETE"
 	db, err := storage.Open(dsn)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
