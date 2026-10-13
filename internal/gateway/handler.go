@@ -1141,6 +1141,14 @@ func (handler *Handler) executeAttempts(
 			var err error
 			selection, err = iterator.Next()
 			if errors.Is(err, scheduler.ErrExhausted) {
+				// 首次尝试前就耗尽属于异常(满载有豁免/排队路径), 记录调度器现场以便定位。
+				if lastAttemptIndex < 0 {
+					utils.LogPlaneBestEffort(handler.logger, logrus.WarnLevel, utils.LogPlaneData,
+						logrus.Fields{"event": "scheduler_exhausted_before_attempt",
+							"access_key_id": recorder.accessKeyID, "model": externalModel,
+							"diagnostics": iterator.ExhaustedDiagnostics()},
+						"Scheduler exhausted before first attempt")
+				}
 				break
 			}
 			if err != nil {

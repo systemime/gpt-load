@@ -2,6 +2,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"errors"
 	"slices"
 	"strings"
@@ -94,6 +95,7 @@ type Iterator struct {
 	credentialUsage       CredentialUsageView
 	usageBalance          bool
 	beyondCap             bool
+	exhaustionDiag        string
 	tried                 map[uint]struct{}
 	skippedGroups         map[uint]struct{}
 	allowedCredentialRefs map[uint]credentialIdentity
@@ -204,6 +206,15 @@ func newCandidatePool() candidatePool {
 		targetsByGroup: make(map[uint][]candidateTarget),
 		groupIDsByMode: make(map[channel.RouteMode][]uint),
 	}
+}
+
+// ExhaustedDiagnostics 返回最近一次 Next() 耗尽时的现场快照(候选数/豁免/模型冷却),
+// 供网关在首次尝试前就耗尽的异常场景记录原因。
+func (iterator *Iterator) ExhaustedDiagnostics() string {
+	if iterator == nil {
+		return ""
+	}
+	return iterator.exhaustionDiag
 }
 
 func (iterator *Iterator) StaticReason() ReasonCode {
@@ -321,7 +332,8 @@ func (iterator *Iterator) Next() (Selection, error) {
 	if iterator == nil || iterator.credentials == nil || iterator.progress == nil || iterator.now == nil {
 		return Selection{}, ErrExhausted
 	}
-	for _, pool := range []*candidatePool{&iterator.regular, &iterator.storeDowngraded} {
+	iterator.exhaustionDiag = ""
+	for poolIndex, pool := range []*candidatePool{&iterator.regular, &iterator.storeDowngraded} {
 		var selected state.CredentialMeta
 		var target candidateTarget
 		var found bool
@@ -340,8 +352,32 @@ func (iterator *Iterator) Next() (Selection, error) {
 						}
 					}
 				}
+				if len(eligible) == 0 {
+					// 耗尽现场诊断: 记录每个候选为何没有可用目标(模型冷却/档位不匹配/无目标)。
+					diag := fmt.Sprintf("pool=%d weighted=%d exempted=%t eligible=0 candidates=[", poolIndex, len(weighted), exempted)
+					for index, candidate := range weighted {
+						if index > 0 {
+							diag += " "
+						}
+						cooldownNote := "-"
+						for _, candidateTarget := range pool.targetsByGroup[candidate.meta.GroupID] {
+							if until := modelCooldownUntil(candidate.meta.ModelCooldowns, candidateTarget.target.UpstreamModelID, iterator.operation, now); until.After(now) {
+								cooldownNote = until.Format("15:04:05")
+								break
+							}
+						}
+						diag += fmt.Sprintf("{id:%d w:%d targets:%d cd:%s}",
+							candidate.meta.ID, candidate.weight,
+							len(pool.targetsByGroup[candidate.meta.GroupID]), cooldownNote)
+					}
+					iterator.exhaustionDiag = diag + "]"
+					continue
+				}
 				selected, found = iterator.selectCredential(eligible, iterator.preferredCredentialID)
 				if !found {
+					iterator.exhaustionDiag = fmt.Sprintf(
+						"pool=%d weighted=%d eligible=%d select_failed preferred=%d",
+						poolIndex, len(weighted), len(eligible), iterator.preferredCredentialID)
 					continue
 				}
 				iterator.beyondCap = exempted
