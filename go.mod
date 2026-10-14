@@ -9,6 +9,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1
 	github.com/klauspost/compress v1.20.1
+	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/maximhq/bifrost/core v1.11.0
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
 	github.com/pion/ice/v4 v4.4.5
@@ -94,7 +95,6 @@ require (
 	github.com/mark3labs/mcp-go v0.43.2 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
-	github.com/mattn/go-sqlite3 v1.14.22 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/molecule-man/go-brrr v1.0.1 // indirect
