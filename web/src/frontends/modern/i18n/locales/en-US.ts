@@ -126,7 +126,6 @@ export default {
     credentialLoad: { title: 'Credential load' },
     inspector: { title: 'Route inspection' },
     settings: { title: 'Global settings' },
-    import: { title: 'Import credentials' },
     login: { title: 'Sign in' },
   },
   notFound: {

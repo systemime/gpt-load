@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, onScopeDispose, ref, watch } from 'vue'
 import { useMessageSource } from '@modern/app/messages'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import {
   credentialDetailKey,
   getCredentialDetail,
@@ -38,6 +39,13 @@ const emit = defineEmits<{ close: []; saved: [row: CredentialRow] }>()
 const { t, n, locale, te } = useI18n()
 const client = useApiClient()
 const cache = useQueryClient()
+const router = useRouter()
+function openLogs(): void {
+  router.push({
+    name: 'modern-logs',
+    query: { group_id: String(props.group.id), credential_id: String(props.row.id), preset: '24h' },
+  })
+}
 const query = useQuery({
   queryKey: credentialDetailKey(props.group.id, props.row.id),
   queryFn: ({ signal }) => getCredentialDetail(client, props.group.id, props.row.id, signal),
@@ -231,7 +239,10 @@ useMessageSource(() =>
       <section class="modern-credential-detail-section">
         <div class="modern-credential-detail-title">
           <h3>{{ t('credentialCards.runtime') }}</h3>
-          <AppBadge :tone="state.tone" dot>{{ t(state.key) }}</AppBadge>
+          <div class="modern-credential-detail-title-actions">
+            <AppButton variant="text" @click="openLogs">{{ t('health.logs') }}</AppButton>
+            <AppBadge :tone="state.tone" dot>{{ t(state.key) }}</AppBadge>
+          </div>
         </div>
         <dl class="modern-credential-detail-metrics">
           <div>
@@ -377,6 +388,11 @@ useMessageSource(() =>
   gap: var(--modern-space-3);
   min-width: 0;
   font-size: var(--modern-font-size-secondary);
+}
+.modern-credential-detail-title-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--modern-space-2);
 }
 .modern-credential-detail-title small,
 .modern-credential-detail-hint {

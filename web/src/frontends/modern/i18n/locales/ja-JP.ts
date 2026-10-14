@@ -125,7 +125,6 @@ export default {
     credentialLoad: { title: '認証情報負荷' },
     inspector: { title: 'ルート検査' },
     settings: { title: 'グローバル設定' },
-    import: { title: '認証情報のインポート' },
     login: { title: 'ログイン' },
   },
   notFound: {

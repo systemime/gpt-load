@@ -74,17 +74,6 @@ export function createModernRouter(
         },
       },
       {
-        path: pagePath('import'),
-        name: 'modern-import',
-        redirect: { name: 'modern-groups', query: { import: '1' } },
-        meta: {
-          primaryNav: 'modern-groups',
-          titleKey: 'pages.import.title',
-          requiresAuth: true,
-          adminOnly: true,
-        },
-      },
-      {
         path: pagePath('login'),
         name: 'modern-login',
         component: LoginView,

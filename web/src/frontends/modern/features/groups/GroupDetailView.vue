@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, ChevronRight, Layers, SlidersHorizontal } from '@lucide/vue'
+import { ArrowLeft, ChevronRight, Layers, ScrollText, SlidersHorizontal } from '@lucide/vue'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 import { useMessages, useMessageSource } from '@modern/app/messages'
@@ -341,6 +341,20 @@ useMessageSource(() =>
               ><span>{{ t('groupDetail.advanced') }}</span
               ><AppIcon :icon="ChevronRight" size="sm"
             /></AppButton>
+            <AppButton as-child
+              ><RouterLink
+                class="modern-group-settings-link"
+                :to="{ name: 'modern-logs', query: { group_id: String(group.id), preset: '24h' } }"
+                ><span>{{ t('health.logs') }}</span
+                ><AppIcon :icon="ScrollText" size="sm"
+              /></RouterLink></AppButton
+            ><AppButton as-child
+              ><RouterLink
+                class="modern-group-settings-link"
+                :to="{ name: 'modern-access-keys', query: { group_id: String(group.id) } }"
+                ><span>{{ t('groupDetail.groupAccessKeys') }}</span
+                ><AppIcon :icon="ChevronRight" size="sm"
+              /></RouterLink></AppButton>
           </nav>
         </GroupBasicsForm>
       </aside>

@@ -222,7 +222,12 @@ function resolveRedactedLog(): Promise<string> {
             :class="'modern-log-result--' + logStatusTone[log.status]"
           >
             <header class="modern-log-result-heading">
-              <AppOverflowText class="modern-log-result-model" :text="log.client_model || '—'" />
+              <RouterLink
+                v-if="log.client_model"
+                class="modern-log-result-model"
+                :to="{ name: 'modern-models', query: { model: log.client_model } }"
+                ><AppOverflowText :text="log.client_model" /></RouterLink
+              ><AppOverflowText v-else class="modern-log-result-model" text="—" />
               <AppBadge :tone="logStatusTone[log.status]" dot>{{
                 t('logs.values.' + log.status)
               }}</AppBadge>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useQuery } from '@tanstack/vue-query'
 
 import {
@@ -17,6 +18,17 @@ import { AppButton, AppCollectionState, AppSegmentedControl, AppTooltip } from '
 
 const client = useApiClient()
 const { t } = useI18n()
+const router = useRouter()
+// 行内下钻: 凭证/异常行跳日志(按凭证过滤), 分组行跳分组详情, 用户行跳密钥详情。
+function openCredentialLogs(credentialID: number): void {
+  router.push({ name: 'modern-logs', query: { credential_id: String(credentialID), preset: '24h' } })
+}
+function openGroupDetail(groupID: number): void {
+  router.push({ name: 'modern-group-detail', params: { id: String(groupID) } })
+}
+function openAccessKeyDetail(accessKeyID: number): void {
+  router.push({ name: 'modern-access-keys', query: { panel: 'detail', access_key: String(accessKeyID) } })
+}
 const query = useQuery({
   queryKey: ['modern', 'credential-load'],
   queryFn: ({ signal }) => getCredentialLoad(client, signal),
@@ -282,7 +294,9 @@ function quotaTone(ratio: number): 'ok' | 'warn' | 'high' {
               <span role="columnheader">{{ t('credentialLoad.columns.status') }}</span>
             </div>
             <div v-for="{ item, stats } in accessRows" :key="item.id" class="modern-credential-load__row" role="row">
-              <span role="cell" class="modern-credential-load__name">{{ displayName(item) }}</span>
+              <span role="cell" class="modern-credential-load__name">
+                <AppButton variant="text" @click="openAccessKeyDetail(item.id)">{{ displayName(item) }}</AppButton>
+              </span>
               <span role="cell" class="modern-credential-load__num modern-credential-load__req">
                 <span class="modern-credential-load__bar" aria-hidden="true">
                   <span class="modern-credential-load__bar-fill" :style="{ width: `${barPercent(stats.requests, accessMax)}%` }"></span>
@@ -338,7 +352,9 @@ function quotaTone(ratio: number): 'ok' | 'warn' | 'high' {
               </span>
             </div>
             <div v-for="{ item, stats } in groupRows" :key="item.id" class="modern-credential-load__row" role="row">
-              <span role="cell" class="modern-credential-load__name">{{ displayName(item) }}</span>
+              <span role="cell" class="modern-credential-load__name">
+                <AppButton variant="text" @click="openGroupDetail(item.id)">{{ displayName(item) }}</AppButton>
+              </span>
               <span role="cell" class="modern-credential-load__num modern-credential-load__req">
                 <span class="modern-credential-load__bar" aria-hidden="true">
                   <span class="modern-credential-load__bar-fill" :style="{ width: `${barPercent(stats.requests, groupRows[0].stats.requests)}%` }"></span>
@@ -388,7 +404,9 @@ function quotaTone(ratio: number): 'ok' | 'warn' | 'high' {
               <span role="columnheader" class="modern-credential-load__num">{{ t('credentialLoad.columns.errors') }}</span>
             </div>
             <div v-for="{ item, stats } in credRows" :key="item.id" class="modern-credential-load__row" role="row">
-              <span role="cell" class="modern-credential-load__name">{{ displayName(item) }}</span>
+              <span role="cell" class="modern-credential-load__name">
+                <AppButton variant="text" @click="openCredentialLogs(item.id)">{{ displayName(item) }}</AppButton>
+              </span>
               <span role="cell" :class="item.runtimeState === 'available' ? 'modern-credential-load__ok' : 'modern-credential-load__muted'">
                 {{ item.runtimeState === 'available' ? item.status : item.runtimeState }}
               </span>
@@ -469,7 +487,9 @@ function quotaTone(ratio: number): 'ok' | 'warn' | 'high' {
             </span>
           </div>
           <div v-for="{ item, errors } in errorRows" :key="item.id" class="modern-credential-load__row" role="row">
-            <span role="cell" class="modern-credential-load__name">{{ displayName(item) }}</span>
+            <span role="cell" class="modern-credential-load__name">
+              <AppButton variant="text" @click="openCredentialLogs(item.id)">{{ displayName(item) }}</AppButton>
+            </span>
             <span
               v-for="column in errorColumns"
               :key="column.key"

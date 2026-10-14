@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useQuery } from '@tanstack/vue-query'
 
 import {
@@ -46,6 +47,14 @@ const PLOT_HEIGHT = CHART_HEIGHT - PLOT_TOP - PLOT_BOTTOM
 
 const client = useApiClient()
 const { t } = useI18n()
+const router = useRouter()
+// 人名行可跳日志: 沿用页面当前时间预设, 按人过滤。两页预设词表一致(15d/30d/…)。
+function openPersonLogs(accessKeyID: number): void {
+  router.push({
+    name: 'modern-logs',
+    query: { access_key_id: String(accessKeyID), preset: preset.value },
+  })
+}
 
 const preset = ref<DateRangePreset>('15d')
 const from = ref('')
@@ -565,7 +574,7 @@ function onTrendLeave(): void {
             <div v-for="person in people" :key="person.id" class="modern-usage-overview__row" role="row">
               <span role="cell" class="modern-usage-overview__name">
                 <span class="modern-usage-overview__swatch" :style="{ background: personColor.get(person.id) }" />
-                {{ personNames.get(person.id) }}
+                <AppButton variant="text" @click="openPersonLogs(person.id)">{{ personNames.get(person.id) }}</AppButton>
               </span>
               <span role="cell" class="modern-credential-load__num">{{ formatCompact(person.totals.requests) }}</span>
               <span role="cell" class="modern-credential-load__num">{{ formatCompact(person.totals.success) }}</span>
