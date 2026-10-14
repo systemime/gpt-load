@@ -66,6 +66,11 @@ func TestPassthroughHTTPErrorProducesNeutralFailureHints(t *testing.T) {
 			want: execution.FailureHintRateLimited,
 		},
 		{
+			name: "GLM weekly cap extracts resume time", status: http.StatusTooManyRequests,
+			body:  `{"error":{"message":"已达到 7 天使用上限，2026-10-15 08:59:59 后可继续使用。如需超限额按量付费使用，可联系管理员开启超额按量付费。","type":"usage_limit_error"}}`,
+			want: execution.FailureHintRateLimited, scope: execution.ErrorScopeCredential,
+		},
+		{
 			name: "model unavailable", status: http.StatusBadRequest,
 			body: `{"error":{"code":"model_not_available"}}`,
 			want: execution.FailureHintModelUnavailable, scope: execution.ErrorScopeModel,
@@ -100,6 +105,9 @@ func TestPassthroughHTTPErrorProducesNeutralFailureHints(t *testing.T) {
 			if got.Hint != test.want || got.OriginHint != execution.ErrorOriginUpstream ||
 				got.ScopeHint != test.scope {
 				t.Fatalf("hint = %q, want %q; evidence=%+v", got.Hint, test.want, got)
+			}
+			if test.name == "GLM weekly cap extracts resume time" && got.RetryAfter <= 0 {
+				t.Fatalf("weekly cap must derive RetryAfter from resume time; evidence=%+v", got)
 			}
 		})
 	}

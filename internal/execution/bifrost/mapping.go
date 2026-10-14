@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -259,7 +260,7 @@ func passthroughHTTPError(status int, headers http.Header, body []byte, secrets 
 	typeValue = sanitizeEvidenceValue(typeValue, secrets)
 	codeValue = sanitizeEvidenceValue(codeValue, secrets)
 	requestID := upstreamRequestID(headers)
-	hint, scope := httpFailureClassification(status, body)
+	hint, scope, bodyResume := httpFailureClassification(status, body)
 	evidence := &execution.ErrorEvidence{
 		Kind:       execution.ErrorKindHTTP,
 		Hint:       hint,
@@ -269,7 +270,7 @@ func passthroughHTTPError(status int, headers http.Header, body []byte, secrets 
 		Code:       codeValue,
 		Summary:    errorMessageSummary(body, errorSummary(execution.ErrorKindHTTP, status), secrets),
 		RequestID:  requestID,
-		RetryAfter: retryAfter(headers),
+		RetryAfter: maxDuration(retryAfter(headers), bodyResume),
 		Header:     evidenceHeaders(headers),
 	}
 	annotateBifrostErrorEvidence(evidence)
@@ -277,14 +278,14 @@ func passthroughHTTPError(status int, headers http.Header, body []byte, secrets 
 }
 
 func failureHintFromHTTP(status int, body []byte) execution.FailureHint {
-	hint, _ := httpFailureClassification(status, body)
+	hint, _, _ := httpFailureClassification(status, body)
 	return hint
 }
 
 // httpFailureClassification 在中性提示之外补齐限流错误的凭证范围:
 // 配额/额度耗尽(如 GLM coding plan 5h/周额度)绑定单个凭证, 应冷却该凭证并
 // 由调度器无感切换到下一候选, 而非把 429 透传给用户。
-func httpFailureClassification(status int, body []byte) (execution.FailureHint, execution.ErrorScope) {
+func httpFailureClassification(status int, body []byte) (execution.FailureHint, execution.ErrorScope, time.Duration) {
 	var payload struct {
 		Error struct {
 			Type    json.RawMessage `json:"type"`
@@ -300,18 +301,51 @@ func httpFailureClassification(status int, body []byte) (execution.FailureHint, 
 		evidenceScalar(payload.Error.Status),
 		payload.Error.Message,
 	}
-	return neutralFailureHint(status, values...), credentialQuotaScope(values...)
+	hint, scope := neutralFailureHint(status, values...), credentialQuotaScope(values...)
+	if scope == execution.ErrorScopeCredential {
+		if resume := quotaResumeAfter(values...); resume > 0 {
+			return hint, scope, resume
+		}
+	}
+	return hint, scope, 0
 }
 
 // credentialQuotaScope 只认配额耗尽类文案; 普通限流(并发/速率)保持范围待定,
-// 由 judge 按操作语义处理。
+// 由 judge 按操作语义处理。覆盖智谱 coding plan 的周/小时上限文案
+// (如"已达到 7 天使用上限")与常见英文/中文额度表述。
 func credentialQuotaScope(values ...string) execution.ErrorScope {
 	if containsAnyMarker(strings.ToLower(strings.Join(values, " ")),
-		"quota", "额度", "配额", "用尽", "用完", "余额不足", "resource_exhausted") {
+		"quota", "额度", "配额", "用尽", "用完", "余额不足", "resource_exhausted", "使用上限") {
 		return execution.ErrorScopeCredential
 	}
 	return ""
 }
+
+// quotaResumeAfter 从额度文案中提取恢复时间(如智谱"2026-10-15 08:59:59 后可继续使用"),
+// 作为 Retry-After 让凭证直接冷却到重置点, 避免周额度耗尽后每分钟空探测。
+// 厂商时间戳按北京时间解析。
+func quotaResumeAfter(values ...string) time.Duration {
+	text := strings.Join(values, " ")
+	match := resumeTimePattern.FindStringSubmatch(text)
+	if match == nil {
+		return 0
+	}
+	location := time.FixedZone("CST", 8*60*60)
+	resumeAt, err := time.ParseInLocation("2006-01-02 15:04:05", match[1], location)
+	if err != nil {
+		return 0
+	}
+	return time.Until(resumeAt)
+}
+
+func maxDuration(left, right time.Duration) time.Duration {
+	if left >= right {
+		return left
+	}
+	return right
+}
+
+var resumeTimePattern = regexp.MustCompile(`(20\d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*后`)
 
 func neutralFailureHint(status int, values ...string) execution.FailureHint {
 	markers := strings.ToLower(strings.Join(values, " "))
@@ -698,6 +732,10 @@ func errorEvidence(
 		evidenceStatus = 0
 	}
 	summary := errorSummary(kind, errorSummaryStatus(status, resultStatus))
+	bodyResume := time.Duration(0)
+	if scope := credentialQuotaScope(typeValue, codeValue, messageValue); scope == execution.ErrorScopeCredential {
+		bodyResume = quotaResumeAfter(typeValue, codeValue, messageValue)
+	}
 	evidence := &execution.ErrorEvidence{
 		Kind:       kind,
 		Hint:       neutralFailureHint(status, typeValue, codeValue, messageValue),
@@ -707,7 +745,7 @@ func errorEvidence(
 		Code:       codeValue,
 		Summary:    errorMessageSummary([]byte(messageValue), summary, secrets),
 		RequestID:  requestID,
-		RetryAfter: retryAfter(headers),
+		RetryAfter: maxDuration(retryAfter(headers), bodyResume),
 		Header:     evidenceHeaders(headers),
 	}
 	if !started {
