@@ -68,6 +68,11 @@ func TestCredentialLoadEndpointAggregatesWindowsErrorsAndInflight(t *testing.T) 
 	}, {
 		ID: 2, GroupID: 1, Status: state.CredentialStatusActive,
 		Version: 1, IdentityGeneration: 1, Fingerprint: "fp-2", EncryptedValue: "cipher",
+	}, {
+		// auth 未就绪的凭证调度器不放行, 可调度口径必须把它排除在 available 外。
+		ID: 3, GroupID: 1, Status: state.CredentialStatusActive,
+		AuthState: state.CredentialAuthStateReauthorizationRequired,
+		Version:   1, IdentityGeneration: 3, Fingerprint: "fp-3", EncryptedValue: "cipher",
 	}}); err != nil {
 		t.Fatalf("ReplaceCredentials() error = %v", err)
 	}
@@ -130,8 +135,11 @@ func TestCredentialLoadEndpointAggregatesWindowsErrorsAndInflight(t *testing.T) 
 		t.Fatalf("credential 1 connect errors(5h) = %d, want 0 (row is 6h old)", first.Errors5h.Connect)
 	}
 	second := byID[2]
-	if second.RuntimeState != string(state.CredentialRuntimeCooldown) {
+	if second.RuntimeState != "cooldown" {
 		t.Fatalf("credential 2 runtime_state = %q, want cooldown", second.RuntimeState)
+	}
+	if third := byID[3]; third.RuntimeState != "disabled" {
+		t.Fatalf("credential 3 runtime_state = %q, want disabled (auth not ready)", third.RuntimeState)
 	}
 	if second.Errors5h.RateLimited != 1 {
 		t.Fatalf("credential 2 rate-limited errors(5h) = %d, want 1", second.Errors5h.RateLimited)

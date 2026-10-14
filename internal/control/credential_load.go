@@ -36,8 +36,8 @@ type credentialLoadItem struct {
 	ID     uint   `json:"id"`
 	Name   string `json:"name"`
 	Status string `json:"status"`
-	// RuntimeState 区分 active 与"已停用/冷却中/已隔离": 只有 available 才参与调度,
-	// 容量口径必须按它算, 否则冷却中的凭证会虚增一个 cap。
+	// RuntimeState 用健康页同款四档(available/cooldown/blacklisted/disabled):
+	// 只有 available 才参与调度, 容量口径必须按它算, 否则会虚增 cap。
 	RuntimeState string                               `json:"runtime_state"`
 	Inflight     int64                                `json:"inflight"`
 	Queued       int64                                `json:"queued"`
@@ -167,9 +167,11 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 	slots := service.registry.Slots()
 	capacity := slots.Capacity()
 	plan := state.GlmPlanStandard
+	var catalog map[uint]state.GroupCatalogView
 	if snapshot := service.manager.Current(); snapshot != nil {
 		capacity = snapshot.Settings.CredentialConcurrencyLimit
 		plan = snapshot.Settings.GlmCodingPlan
+		catalog = snapshot.GroupCatalog
 	}
 	quota5h, quota7d := plan.Quota()
 
@@ -198,9 +200,17 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 		if itemWindows == nil {
 			itemWindows = emptyCredentialLoadWindows() // 窗口内无请求的凭证(如已禁用)
 		}
+		// 可调度口径与健康页/首页/分组页统一走 classifyHealthKey:
+		// 除了 status/拉黑/冷却, 还要排除 auth 未就绪、权重 0、所在分组停用,
+		// 否则容量与调度器真实放行集合对不上。快照里查不到分组时按启用处理,
+		// 避免把"目录暂缺"误报成停用。
+		groupView, known := catalog[view.GroupID]
+		if !known {
+			groupView = state.GroupCatalogView{ID: view.GroupID, Enabled: true}
+		}
 		item := credentialLoadItem{
 			ID: view.ID, Name: names[view.ID], Status: string(view.Status),
-			RuntimeState: string(view.RuntimeState(observedTime)),
+			RuntimeState: string(classifyHealthKey(groupView, view, observedTime)),
 			Inflight:     slots.Inflight(view.ID),
 			Queued:       slots.Waiting(view.ID),
 			Usage: credentialLoadUsage{
