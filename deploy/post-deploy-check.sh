@@ -52,7 +52,13 @@ for port in $PORTS; do
 done
 
 echo "==> [2/7] container health"
-state=$(docker inspect "gpt-load-$active_slot" --format '{{.State.Status}} {{.State.Health.Status}}' 2>/dev/null || echo "missing missing")
+state="missing missing"
+for _ in $(seq 1 60); do
+  state=$(docker inspect "gpt-load-$active_slot" --format '{{.State.Status}} {{.State.Health.Status}}' 2>/dev/null || echo "missing missing")
+  [ "$state" = "running healthy" ] && break
+  # healthcheck 有 start_period, starting 是正常过渡态, 等它而不是立刻重启。
+  sleep 2
+done
 if [ "$state" = "running healthy" ]; then
   echo "    gpt-load-$active_slot: running healthy"
 else
@@ -123,24 +129,36 @@ else
   echo "    disk ${usage}%: ok"
 fi
 
-echo "==> [7/7] DB integrity gate (online backup copy)"
+echo "==> [7/7] DB integrity gate (offline copy — NEVER open the live DB with host sqlite3)"
 if [ -x "$SQLITE" ]; then
   CHECK=/tmp/gpt-load-postcheck.db
-  rm -f "$CHECK"
-  if "$SQLITE" "$DB" ".backup $CHECK" 2>/dev/null; then
-    INTEGRITY=$("$SQLITE" "file:$CHECK?mode=ro" "PRAGMA integrity_check;" 2>&1 | head -1)
-    FKCOUNT=$("$SQLITE" "file:$CHECK?mode=ro" "PRAGMA foreign_key_check;" 2>&1 | wc -l)
-    if [ "$INTEGRITY" = "ok" ] && [ "$FKCOUNT" -eq 0 ]; then
-      echo "    integrity ok, fk violations: 0"
+  rm -f "$CHECK" "$CHECK-wal" "$CHECK-shm"
+  # 宿主 CLI 直接开活库做 .backup, 退出时会 checkpoint 并 unlink -wal/-shm ——
+  # 在役进程从此攥着已删除的 inode 继续写, 这正是历次"部署后几分钟 malformed"的元凶。
+  # 只 cp 三件套再查副本; sqlite 恢复/写回都发生在副本上, 活库零接触。
+  if cp "$DB" "$CHECK" 2>/dev/null &&
+     { [ ! -f "$DB-wal" ] || cp "$DB-wal" "$CHECK-wal"; } &&
+     { [ ! -f "$DB-shm" ] || cp "$DB-shm" "$CHECK-shm"; }; then
+    INTEGRITY=$("$SQLITE" "$CHECK" "PRAGMA quick_check;" 2>&1 | head -1)
+    if [ "$INTEGRITY" = "ok" ]; then
+      FKCOUNT=$("$SQLITE" "$CHECK" "PRAGMA foreign_key_check;" 2>&1 | wc -l)
+      if [ "$FKCOUNT" -eq 0 ]; then
+        echo "    integrity ok, fk violations: 0"
+      else
+        echo "    !! FK VIOLATIONS: $FKCOUNT rows — manual recovery needed"
+        cp "$CHECK" /root/gpt-load-suspect-$(date +%Y%m%d-%H%M%S).db
+        rm -f "$CHECK" "$CHECK-wal" "$CHECK-shm"
+        exit 2
+      fi
     else
-      echo "    !! INTEGRITY FAILED: integrity=$INTEGRITY fk_rows=$FKCOUNT — manual recovery needed"
+      echo "    !! INTEGRITY FAILED: $INTEGRITY — manual recovery needed"
       cp "$CHECK" /root/gpt-load-suspect-$(date +%Y%m%d-%H%M%S).db
-      rm -f "$CHECK"
+      rm -f "$CHECK" "$CHECK-wal" "$CHECK-shm"
       exit 2
     fi
-    rm -f "$CHECK"
+    rm -f "$CHECK" "$CHECK-wal" "$CHECK-shm"
   else
-    echo "    !! backup failed (container running?) — treat as suspect"
+    echo "    !! copy failed — treat as suspect"
     FAILURES+=1
   fi
 else
