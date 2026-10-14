@@ -4364,6 +4364,7 @@ func TestHandlerReturnsStableTerminalReasons(t *testing.T) {
 		{name: "malformed registered endpoint", path: "/v1beta/models/missing-action", accessKey: "gl-client", body: `{}`, wantStatus: http.StatusNotFound, wantCode: "protocol_endpoint_not_found"},
 		{name: "invalid protocol request", path: "/v1/chat/completions", accessKey: "gl-client", body: `{}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_protocol_request"},
 		{name: "no candidate", path: "/v1/chat/completions", accessKey: "gl-client", body: `{"model":"gpt-4o"}`, wantStatus: http.StatusServiceUnavailable, wantCode: "no_available_candidate"},
+		{name: "unknown model", path: "/v1/chat/completions", accessKey: "gl-client", body: `{"model":"gim-5.3-flash"}`, wantStatus: http.StatusBadRequest, wantCode: "model_not_found"},
 		{
 			name: "post-write timeout",
 			path: "/v1/chat/completions", accessKey: "gl-client", body: `{"model":"gpt-4o"}`,
