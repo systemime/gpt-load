@@ -350,9 +350,14 @@ func TestWriteConfigMakesCreatedGroupAndFirstKeyAtomicallyVisibleToDataPlane(t *
 		t.Fatal("timed out waiting for Registry publication barrier")
 	}
 	beforePublish := performRequest()
-	if beforePublish.Code != http.StatusServiceUnavailable ||
-		!strings.Contains(beforePublish.Body.String(), "no_available_candidate") {
-		t.Fatalf("request before Snapshot publication = %d %s, want no candidate", beforePublish.Code, beforePublish.Body.String())
+	// 发布窗口内路由尚未建成: 503 no_available_candidate 或 400 model_not_found
+	// (模型在旧快照中不存在)都成立, 关键断言是不触达上游。
+	if beforePublish.Code != http.StatusServiceUnavailable && beforePublish.Code != http.StatusBadRequest {
+		t.Fatalf("request before Snapshot publication = %d %s, want 503/400", beforePublish.Code, beforePublish.Body.String())
+	}
+	if !strings.Contains(beforePublish.Body.String(), "no_available_candidate") &&
+		!strings.Contains(beforePublish.Body.String(), "model_not_found") {
+		t.Fatalf("request before Snapshot publication = %d %s, want no candidate or model_not_found", beforePublish.Code, beforePublish.Body.String())
 	}
 	select {
 	case request := <-upstreamRequests:

@@ -1682,15 +1682,18 @@ func (handler *Handler) executeAttempts(
 		return
 	}
 	// 请求模型在路由表中无任何目标(如模型名拼写错误)属于客户端错误,
-	// 返回 400 而非 503, 避免被误读为服务故障。
+	// 返回 400 而非 503, 避免被误读为服务故障。但分组模型列表本应包含该模型
+	// 而路由尚未发布/组暂无目标时保持 503, 让客户端稍后重试。
 	switch iterator.StaticReason() {
 	case scheduler.ReasonNoRouteTarget:
-		value := reasonModelNotServed
-		if externalModel != "" {
-			value.Message = fmt.Sprintf("%s (model: %s)", value.Message, externalModel)
+		if !handler.modelServedByAllowedGroups(snapshot, allowedCredentialRefs, externalModel) {
+			value := reasonModelNotServed
+			if externalModel != "" {
+				value.Message = fmt.Sprintf("%s (model: %s)", value.Message, externalModel)
+			}
+			handler.completeReason(ginContext, recorder, value)
+			return
 		}
-		handler.completeReason(ginContext, recorder, value)
-		return
 	case scheduler.ReasonModelFiltered:
 		value := reasonModelFiltered
 		if externalModel != "" {
@@ -1731,6 +1734,36 @@ func (handler *Handler) allowedCredentialsAllAtCapacity(allowedCredentialRefs ma
 		}
 	}
 	return checked > 0
+}
+
+// modelServedByAllowedGroups 报告任一允许分组在配置上声明了该外部模型;
+// 配置里有而路由未发布时, 耗尽属于瞬态, 应保持可重试语义。
+func (handler *Handler) modelServedByAllowedGroups(
+	snapshot *state.ConfigSnapshot,
+	allowedCredentialRefs map[uint]state.CredentialRef,
+	externalModel string,
+) bool {
+	if snapshot == nil {
+		return false
+	}
+	declaredGroups := make(map[uint]struct{}, len(allowedCredentialRefs))
+	for _, ref := range allowedCredentialRefs {
+		if ref.ID != 0 {
+			declaredGroups[ref.GroupID] = struct{}{}
+		}
+	}
+	for groupID := range declaredGroups {
+		group, exists := snapshot.Groups[groupID]
+		if !exists {
+			continue
+		}
+		for _, model := range group.Models {
+			if model.ID == externalModel || (model.Alias != "" && model.Alias == externalModel) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func setCooldownRetryAfter(ctx *gin.Context, until, now time.Time) {
