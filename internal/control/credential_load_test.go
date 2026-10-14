@@ -71,6 +71,8 @@ func TestCredentialLoadEndpointAggregatesWindowsErrorsAndInflight(t *testing.T) 
 	}}); err != nil {
 		t.Fatalf("ReplaceCredentials() error = %v", err)
 	}
+	// 冷却中的凭证不参与调度, 容量口径必须按 runtime_state 算而不是 configured status。
+	fixture.registry.SetCooldown(2, time.Now().Add(time.Hour))
 	slots := fixture.registry.Slots()
 	slots.Configure(2)
 	if !slots.TryAcquire(1) {
@@ -114,6 +116,9 @@ func TestCredentialLoadEndpointAggregatesWindowsErrorsAndInflight(t *testing.T) 
 	if first.Name != "alpha" || first.Inflight != 1 {
 		t.Fatalf("credential 1 = %#v, want name alpha inflight 1", first)
 	}
+	if first.RuntimeState != string(state.CredentialRuntimeAvailable) {
+		t.Fatalf("credential 1 runtime_state = %q, want available", first.RuntimeState)
+	}
 	if first.Windows["1h"].Requests != 1 || first.Windows["1h"].Success != 1 ||
 		first.Windows["1h"].AffinityHits != 1 || first.Windows["1h"].CacheReadTokens != 900 {
 		t.Fatalf("credential 1 1h window = %#v", first.Windows["1h"])
@@ -125,6 +130,9 @@ func TestCredentialLoadEndpointAggregatesWindowsErrorsAndInflight(t *testing.T) 
 		t.Fatalf("credential 1 connect errors(5h) = %d, want 0 (row is 6h old)", first.Errors5h.Connect)
 	}
 	second := byID[2]
+	if second.RuntimeState != string(state.CredentialRuntimeCooldown) {
+		t.Fatalf("credential 2 runtime_state = %q, want cooldown", second.RuntimeState)
+	}
 	if second.Errors5h.RateLimited != 1 {
 		t.Fatalf("credential 2 rate-limited errors(5h) = %d, want 1", second.Errors5h.RateLimited)
 	}

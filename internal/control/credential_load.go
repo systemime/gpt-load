@@ -33,17 +33,20 @@ type credentialLoadErrorStats struct {
 }
 
 type credentialLoadItem struct {
-	ID       uint                                 `json:"id"`
-	Name     string                               `json:"name"`
-	Status   string                               `json:"status"`
-	Inflight int64                                `json:"inflight"`
-	Queued   int64                                `json:"queued"`
-	Usage    credentialLoadUsage                  `json:"usage"`
-	Pressure float64                              `json:"pressure"`
-	Credits5h float64                             `json:"credits_5h"`
-	Credits7d float64                             `json:"credits_7d"`
-	Windows  map[string]credentialLoadWindowStats `json:"windows"`
-	Errors5h credentialLoadErrorStats             `json:"errors_5h"`
+	ID     uint   `json:"id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	// RuntimeState 区分 active 与"已停用/冷却中/已隔离": 只有 available 才参与调度,
+	// 容量口径必须按它算, 否则冷却中的凭证会虚增一个 cap。
+	RuntimeState string                               `json:"runtime_state"`
+	Inflight     int64                                `json:"inflight"`
+	Queued       int64                                `json:"queued"`
+	Usage        credentialLoadUsage                  `json:"usage"`
+	Pressure     float64                              `json:"pressure"`
+	Credits5h    float64                              `json:"credits_5h"`
+	Credits7d    float64                              `json:"credits_7d"`
+	Windows      map[string]credentialLoadWindowStats `json:"windows"`
+	Errors5h     credentialLoadErrorStats             `json:"errors_5h"`
 }
 
 type credentialLoadUsage struct {
@@ -118,7 +121,8 @@ func (stats *credentialLoadErrorStats) add(category string, count int64) {
 
 func (server *Server) handleCredentialLoad(c *gin.Context) {
 	service := server.service
-	observedAt, err := safeEpochMilliseconds(service.now())
+	observedTime := service.now()
+	observedAt, err := safeEpochMilliseconds(observedTime)
 	if err != nil {
 		writeServiceError(c, "credential_load", err)
 		return
@@ -196,17 +200,18 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 		}
 		item := credentialLoadItem{
 			ID: view.ID, Name: names[view.ID], Status: string(view.Status),
-			Inflight: slots.Inflight(view.ID),
-			Queued:   slots.Waiting(view.ID),
+			RuntimeState: string(view.RuntimeState(observedTime)),
+			Inflight:     slots.Inflight(view.ID),
+			Queued:       slots.Waiting(view.ID),
 			Usage: credentialLoadUsage{
 				Requests5h: usage.Requests5h, Tokens5h: usage.Tokens5h,
 				Requests7d: usage.Requests7d, Tokens7d: usage.Tokens7d,
 			},
-			Pressure: pressures[view.ID],
+			Pressure:  pressures[view.ID],
 			Credits5h: usage.Credits5h,
 			Credits7d: usage.Credits7d,
-			Windows:  itemWindows,
-			Errors5h: errorCounts[view.ID],
+			Windows:   itemWindows,
+			Errors5h:  errorCounts[view.ID],
 		}
 		result.Credentials = append(result.Credentials, item)
 	}

@@ -103,9 +103,11 @@ const totals = computed(() => {
     },
     { requests: 0, success: 0, affinityHits: 0, tokens: 0, cacheRead: 0, inflight: 0, queued: 0, errors5h: 0 },
   )
-  // 容量只统计可调度凭证; 已停用凭证不再参与准入, 计入会虚增总容量。
+  // 容量只统计可调度凭证; 停用/冷却/隔离期间同样不参与准入, 计入会虚增总容量。
   const capacity =
-    data.cap > 0 ? data.cap * data.credentials.filter((item) => item.status === 'active').length : 0
+    data.cap > 0
+      ? data.cap * data.credentials.filter((item) => item.runtimeState === 'available').length
+      : 0
   return { ...stats, capacity, rejects: data.localRejects[activeWindow.value] }
 })
 
@@ -387,8 +389,8 @@ function quotaTone(ratio: number): 'ok' | 'warn' | 'high' {
             </div>
             <div v-for="{ item, stats } in credRows" :key="item.id" class="modern-credential-load__row" role="row">
               <span role="cell" class="modern-credential-load__name">{{ displayName(item) }}</span>
-              <span role="cell" :class="item.status === 'active' ? 'modern-credential-load__ok' : 'modern-credential-load__muted'">
-                {{ item.status }}
+              <span role="cell" :class="item.runtimeState === 'available' ? 'modern-credential-load__ok' : 'modern-credential-load__muted'">
+                {{ item.runtimeState === 'available' ? item.status : item.runtimeState }}
               </span>
               <span role="cell" class="modern-credential-load__num modern-credential-load__req">
                 <span class="modern-credential-load__bar" aria-hidden="true">

@@ -35,6 +35,8 @@ export interface CredentialLoadItem {
   id: number
   name: string
   status: string
+  // runtimeState 只有 available 才参与调度, 冷却/停用/隔离期间不占容量。
+  runtimeState: string
   inflight: number
   queued: number
   usage: CredentialLoadUsage
@@ -107,6 +109,7 @@ function readItem(value: unknown): CredentialLoadItem {
     id: integer(row.id, 1),
     name: text(row.name),
     status: text(row.status),
+    runtimeState: text(row.runtime_state ?? 'active'),
     inflight: integer(row.inflight),
     queued: integer(row.queued),
     usage: (() => {
