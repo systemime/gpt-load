@@ -2,7 +2,6 @@ package state
 
 import (
 	"math"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -241,7 +240,8 @@ func (slots *CredentialSlots) AcquireAnyWithin(
 	}
 }
 
-// tryAcquireAnyWithin 按优先序尝试候选: preferred 最先, 其余按在途升序。
+// tryAcquireAnyWithin 按优先序尝试候选: preferred 最先, 其余按传入顺序。
+// 顺序由调用方决定(网关按综合负载分排序), 等待唤醒后复用同一顺序。
 // 返回成功占位的凭证; 全部达 limit 时 ok=false。
 func (slots *CredentialSlots) tryAcquireAnyWithin(ids []uint, preferred uint) (uint, bool) {
 	if preferred != 0 {
@@ -249,16 +249,10 @@ func (slots *CredentialSlots) tryAcquireAnyWithin(ids []uint, preferred uint) (u
 			return preferred, true
 		}
 	}
-	ordered := make([]uint, 0, len(ids))
 	for _, id := range ids {
-		if id != 0 && id != preferred {
-			ordered = append(ordered, id)
+		if id == 0 || id == preferred {
+			continue
 		}
-	}
-	sort.Slice(ordered, func(i, j int) bool {
-		return slots.Inflight(ordered[i]) < slots.Inflight(ordered[j])
-	})
-	for _, id := range ordered {
 		if slots.TryAcquireWithin(id, slots.BudgetFor(id)) {
 			return id, true
 		}

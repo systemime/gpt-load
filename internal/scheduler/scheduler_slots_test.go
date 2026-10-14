@@ -123,8 +123,12 @@ func TestIteratorUsageBalancePrefersLessConsumedCredential(t *testing.T) {
 	source := fakeCredentialSource{keys: []state.CredentialMeta{
 		{ID: 11, GroupID: 1}, {ID: 12, GroupID: 1},
 	}}
-	usage := staticUsageView{11: {Requests5h: 900}, 12: {Requests5h: 100}}
-	query := slotTestQuery(nil)
+	// score = (在途/cap)×P: 在途并列(各 1)时由 5h token 消耗 P 决出低分者。
+	slots := state.NewCredentialSlots(4)
+	slots.TryAcquire(11)
+	slots.TryAcquire(12)
+	usage := staticUsageView{11: {Tokens5h: 900}, 12: {Tokens5h: 100}}
+	query := slotTestQuery(slots)
 	query.CredentialUsage = usage
 	query.UsageBalance = true
 	iterator := New(schedulerSnapshot(), source, query)
@@ -134,11 +138,31 @@ func TestIteratorUsageBalancePrefersLessConsumedCredential(t *testing.T) {
 	}
 }
 
+func TestIteratorUsageBalanceIgnoresWeightsUnderScoreFormula(t *testing.T) {
+	source := fakeCredentialSource{keys: []state.CredentialMeta{
+		{ID: 11, GroupID: 1, WeightManual: modelWeightPointer(1)},
+		{ID: 12, GroupID: 1, WeightManual: modelWeightPointer(4)},
+	}}
+	// 综合分公式不含权重维度: 同在途下 12 消耗更高即被避让, 权重只影响公平序并列。
+	slots := state.NewCredentialSlots(4)
+	slots.TryAcquire(11)
+	slots.TryAcquire(12)
+	usage := staticUsageView{11: {Tokens5h: 200}, 12: {Tokens5h: 300}}
+	query := slotTestQuery(slots)
+	query.CredentialUsage = usage
+	query.UsageBalance = true
+	iterator := New(schedulerSnapshot(), source, query)
+	selection, err := iterator.Next()
+	if err != nil || selection.CredentialID != 11 {
+		t.Fatalf("Next() = (%#v, %v), want lower-score key 11 regardless of weight", selection, err)
+	}
+}
+
 func TestIteratorUsageBalanceRespectsPreferredAffinity(t *testing.T) {
 	source := fakeCredentialSource{keys: []state.CredentialMeta{
 		{ID: 11, GroupID: 1}, {ID: 12, GroupID: 1},
 	}}
-	usage := staticUsageView{11: {Requests5h: 900}, 12: {Requests5h: 100}}
+	usage := staticUsageView{11: {Requests5h: 900, Tokens5h: 900}, 12: {Requests5h: 100, Tokens5h: 100}}
 	query := slotTestQuery(nil)
 	query.CredentialUsage = usage
 	query.UsageBalance = true
@@ -168,7 +192,7 @@ func TestIteratorUsageBalanceDisabledKeepsFairOrder(t *testing.T) {
 	source := fakeCredentialSource{keys: []state.CredentialMeta{
 		{ID: 11, GroupID: 1}, {ID: 12, GroupID: 1},
 	}}
-	usage := staticUsageView{11: {Requests5h: 900}, 12: {Requests5h: 100}}
+	usage := staticUsageView{11: {Requests5h: 900, Tokens5h: 900}, 12: {Requests5h: 100, Tokens5h: 100}}
 	query := slotTestQuery(nil)
 	query.CredentialUsage = usage
 	query.UsageBalance = false
@@ -176,23 +200,6 @@ func TestIteratorUsageBalanceDisabledKeepsFairOrder(t *testing.T) {
 	selection, err := iterator.Next()
 	if err != nil || selection.CredentialID != 11 {
 		t.Fatalf("Next() = (%#v, %v), want fair-order key 11 when balance disabled", selection, err)
-	}
-}
-
-func TestIteratorUsageBalanceWeightsSetTargetShare(t *testing.T) {
-	source := fakeCredentialSource{keys: []state.CredentialMeta{
-		{ID: 11, GroupID: 1, WeightManual: modelWeightPointer(1)},
-		{ID: 12, GroupID: 1, WeightManual: modelWeightPointer(4)},
-	}}
-	// 11 权重 1/5=20%, 12 权重 4/5=80%: 12 用 300(实际60%) 仍低于目标 → 压力更低。
-	usage := staticUsageView{11: {Requests5h: 200}, 12: {Requests5h: 300}}
-	query := slotTestQuery(nil)
-	query.CredentialUsage = usage
-	query.UsageBalance = true
-	iterator := New(schedulerSnapshot(), source, query)
-	selection, err := iterator.Next()
-	if err != nil || selection.CredentialID != 12 {
-		t.Fatalf("Next() = (%#v, %v), want heavier-weight key 12 with lower pressure", selection, err)
 	}
 }
 

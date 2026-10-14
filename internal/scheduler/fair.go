@@ -78,15 +78,21 @@ func (iterator *Iterator) selectCredential(candidates []weightedCredential, pref
 			}
 			return a.ID < b.ID
 		}
-		pressure, pressureActive := iterator.usagePressures(eligible)
-		first := eligible[0]
-		for _, candidate := range eligible[1:] {
-			if pressureActive {
-				if pressure[candidate.meta.ID] < pressure[first.meta.ID] {
+		scores, scoresActive := iterator.usageScores(eligible)
+		// 非亲和候选软排除: inflight 已过 cap-2 档(阶段2高载)的凭证不再接受
+		// 新会话/无亲和分配, 亲和钉住由下方 preferred 覆盖继续放行到 cap。
+		selection := eligible
+		if relaxed := excludeHighLoadCredentials(iterator, eligible); len(relaxed) > 0 {
+			selection = relaxed
+		}
+		first := selection[0]
+		for _, candidate := range selection[1:] {
+			if scoresActive {
+				if scores[candidate.meta.ID] < scores[first.meta.ID] {
 					first = candidate
 					continue
 				}
-				if pressure[candidate.meta.ID] > pressure[first.meta.ID] {
+				if scores[candidate.meta.ID] > scores[first.meta.ID] {
 					continue
 				}
 			}
@@ -136,50 +142,67 @@ func (iterator *Iterator) selectCredential(candidates []weightedCredential, pref
 	return selected, found
 }
 
-// usagePressures 计算候选集内每凭证的用量压力 = max(各窗口/各指标的实际份额/目标份额),
-// 目标份额取有效权重占比。任一维度有数据即激活; 全零返回 false 回落公平序。
-// token 指标使用官方积分口径(模型系数 + 缓存命中折扣 + 非高峰半价),
-// 缓存热凭证积分份额低, 均衡器自然偏向缓存命中率高的一侧。
-// preferred(亲和)优先级在其之上, 已钉住的会话不受用量均衡影响。
-func (iterator *Iterator) usagePressures(eligible []weightedCredential) (map[uint]float64, bool) {
+// usageScores 计算候选集内每凭证的综合负载分 = (在途/cap) × P,
+// P = 该凭证 5h token 消耗 / 池内最大 5h token 消耗(裸 token, 官方积分口径不透明不采用)。
+// 分数越小越优先; 全零消耗或均衡开关关闭时返回 false 回落公平序。
+// 只看 5h: 这是厂商的第一层额度窗口, 周维度由停用/权重管理。
+func (iterator *Iterator) usageScores(eligible []weightedCredential) (map[uint]float64, bool) {
 	if iterator.credentialUsage == nil || !iterator.usageBalance || len(eligible) < 2 {
 		return nil, false
 	}
-	usages := make(map[uint]state.CredentialUsage, len(eligible))
-	var totalWeight, requests5h, credits5h, requests7d, credits7d float64
+	ids := make([]uint, 0, len(eligible))
 	for _, candidate := range eligible {
-		usage := iterator.credentialUsage.Usage(candidate.meta.ID)
-		usages[candidate.meta.ID] = usage
-		totalWeight += float64(candidate.weight)
-		requests5h += float64(usage.Requests5h)
-		credits5h += usage.Credits5h
-		requests7d += float64(usage.Requests7d)
-		credits7d += usage.Credits7d
+		ids = append(ids, candidate.meta.ID)
 	}
-	if requests5h <= 0 && credits5h <= 0 && requests7d <= 0 && credits7d <= 0 {
+	return UsageScores(ids, iterator.credentialSlots, iterator.credentialUsage)
+}
+
+// UsageScores 是综合负载分的唯一实现, 网关超发区排序与调度器共用,
+// 保证阶段2(cap-2~cap)与阶段3(cap~cap+2)用同一把尺子。全零消耗返回 false。
+func UsageScores(ids []uint, slots *state.CredentialSlots, usage CredentialUsageView) (map[uint]float64, bool) {
+	usages := make(map[uint]state.CredentialUsage, len(ids))
+	var maxTokens5h float64
+	for _, id := range ids {
+		value := usage.Usage(id)
+		usages[id] = value
+		if float64(value.Tokens5h) > maxTokens5h {
+			maxTokens5h = float64(value.Tokens5h)
+		}
+	}
+	if maxTokens5h <= 0 {
 		return nil, false
 	}
-	share := func(part float64, total float64, target float64) float64 {
-		if total <= 0 || target <= 0 {
-			return 0
+	scores := make(map[uint]float64, len(ids))
+	for _, id := range ids {
+		pressure := float64(usages[id].Tokens5h) / maxTokens5h
+		if slots == nil {
+			scores[id] = pressure
+			continue
 		}
-		return (part / total) / target
+		limit := slots.EffectiveLimit(id)
+		if limit <= 0 {
+			scores[id] = pressure
+			continue
+		}
+		scores[id] = (float64(slots.Inflight(id)) / float64(limit)) * pressure
 	}
-	pressure := make(map[uint]float64, len(eligible))
+	return scores, true
+}
+
+// excludeHighLoadCredentials 返回未越过高载线(inflight <= cap-2)的候选;
+// 空结果表示全部高载(此时调用方回退全集)。无槽位/不限发场景返回 nil。
+func excludeHighLoadCredentials(iterator *Iterator, eligible []weightedCredential) []weightedCredential {
+	if iterator.credentialSlots == nil {
+		return nil
+	}
+	var relaxed []weightedCredential
 	for _, candidate := range eligible {
-		usage := usages[candidate.meta.ID]
-		target := float64(candidate.weight) / totalWeight
-		value := share(float64(usage.Requests5h), requests5h, target)
-		if next := share(usage.Credits5h, credits5h, target); next > value {
-			value = next
+		id := candidate.meta.ID
+		limit := iterator.credentialSlots.EffectiveLimit(id)
+		if limit < 3 || iterator.credentialSlots.Inflight(id) <= limit-2 {
+			// cap<=2 时 cap-2 无实际容量意义, 视为未高载。
+			relaxed = append(relaxed, candidate)
 		}
-		if next := share(float64(usage.Requests7d), requests7d, target); next > value {
-			value = next
-		}
-		if next := share(usage.Credits7d, credits7d, target); next > value {
-			value = next
-		}
-		pressure[candidate.meta.ID] = value
 	}
-	return pressure, true
+	return relaxed
 }

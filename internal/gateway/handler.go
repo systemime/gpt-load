@@ -712,6 +712,9 @@ func (handler *Handler) Handle(ginContext *gin.Context) {
 			handler.completeReason(ginContext, recorder, reasonResponseBindingNotFound)
 			return
 		}
+		// 续接必须钉住原凭证: previous_response_id 绑定在上游账号(凭证)上,
+		// 换凭证续接必然失败。绑定凭证被停用时保留钉死语义, 候选为空将得到
+		// model/route 级错误, 客户端据此开启新会话。
 		query.AllowedCredentialIDs = map[uint]struct{}{binding.CredentialID: {}}
 		query.AllowedCredentialRefs = map[uint]state.CredentialRef{
 			binding.CredentialID: {

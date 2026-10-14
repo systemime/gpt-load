@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"sort"
+
 	"github.com/gin-gonic/gin"
 
 	"gpt-load/internal/affinity"
@@ -66,6 +68,14 @@ func (handler *Handler) admitBeyondCap(
 		if budget := slots.BudgetFor(id); budget > maxBudget {
 			maxBudget = budget
 		}
+	}
+	// 阶段3(cap~cap+2)超发候选按综合负载分升序, 与阶段2共用同一公式;
+	// 无用量数据时按在途升序(旧语义兜底)。
+	usageView := handler.registry.UsageTracker()
+	if scores, ok := scheduler.UsageScores(ids, slots, usageView); ok {
+		sort.Slice(ids, func(i, j int) bool { return scores[ids[i]] < scores[ids[j]] })
+	} else {
+		sort.Slice(ids, func(i, j int) bool { return slots.Inflight(ids[i]) < slots.Inflight(ids[j]) })
 	}
 	queueEnabled := snapshot.Settings.CredentialQueueEnabled
 	if !queueEnabled {
