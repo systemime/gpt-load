@@ -3630,8 +3630,11 @@ func TestHandlerAppliesExactCooldownDeadline(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			engine.ServeHTTP(recorder, request)
 
-			if until := registry.ModelCooldowns(1, attemptNow)["gpt-4o"]; !until.Equal(test.want) {
-				t.Fatalf("model deadline = %v, want %v", until, test.want)
+			until := registry.ModelCooldowns(1, attemptNow)["gpt-4o"]
+			// default 冷却带 -5s~+20s 抖动; 精确规则(Retry-After/重置头)仍逐秒相等。
+			lower, upper := test.want.Add(-5*time.Second), test.want.Add(20*time.Second)
+			if !until.Equal(test.want) && (until.Before(lower) || until.After(upper)) {
+				t.Fatalf("model deadline = %v, want %v (±[-5s,+20s] for default rules)", until, test.want)
 			}
 		})
 	}
@@ -3766,8 +3769,12 @@ func TestSubscriptionRateLimitWithoutResetUsesTenMinuteCooldown(t *testing.T) {
 	engine.ServeHTTP(httptest.NewRecorder(), request)
 
 	views := registry.Snapshot()
-	if len(views) != 1 || !views[0].ModelCooldowns["gpt-4o"].Equal(attemptNow.Add(10*time.Minute)) {
-		t.Fatalf("subscription cooldown = %#v, want %v", views, attemptNow.Add(10*time.Minute))
+	want := attemptNow.Add(10 * time.Minute)
+	if len(views) != 1 {
+		t.Fatalf("subscription cooldown = %#v, want single view", views)
+	}
+	if got := views[0].ModelCooldowns["gpt-4o"]; got.Before(want.Add(-5*time.Second)) || got.After(want.Add(20*time.Second)) {
+		t.Fatalf("subscription cooldown = %v, want %v (±[-5s,+20s])", got, want)
 	}
 }
 

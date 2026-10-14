@@ -120,6 +120,7 @@ type Handler struct {
 	logger              *logrus.Logger
 	authFailureEvents   *utils.RateLimitedEventCounter
 	routeNotFoundEvents *utils.RateLimitedEventCounter
+	escalation          *rateLimitEscalation
 	lifecycle           *httplifecycle.Coordinator
 	affinityCache       *affinity.Cache
 	credentialSlots     *state.CredentialSlots
@@ -184,6 +185,7 @@ func NewHandler(
 		forwarder: forwarder, dialects: dialects, stats: stats, mutations: mutations,
 		limiter: limiter, requestLogSink: requestLogSink, priceTables: priceTables,
 		affinityCache:    affinity.NewCache(),
+		escalation:       newRateLimitEscalation(),
 		credentialSlots:  registry.Slots(),
 		responseBindings: state.NewResponseBindings(),
 		websocketLimits:  defaultWebsocketLimits(),
@@ -329,22 +331,29 @@ func (handler *Handler) applyDecisionEffectWithBlacklistPolicy(
 	model string,
 ) {
 	credentialID := ref.ID
+	// 退避策略只作用于无精确恢复时间的 default 冷却; Retry-After/重置头原样生效并清零状态。
+	escalatedUntil := decision.CooldownUntil
+	if handler.escalation != nil && strings.HasSuffix(string(decision.RuleID), "default_cooldown") {
+		escalatedUntil = handler.escalation.until(escalationKey(credentialID, model), decision.CooldownUntil.Sub(attemptNow), attemptNow)
+	} else if handler.escalation != nil {
+		handler.escalation.forget(credentialID, model)
+	}
 	switch decision.Effect {
 	case health.EffectCooldownModel:
 		handler.mutateCredentialForTarget(ref, func() {
-			accepted, changed := handler.registry.SetModelCooldown(ref, model, decision.CooldownUntil, attemptNow)
+			accepted, changed := handler.registry.SetModelCooldown(ref, model, escalatedUntil, attemptNow)
 			if accepted {
 				handler.stats.RecordProblem(credentialID, decision.Category, statusCode, attemptNow)
 			}
 			if changed {
 				utils.LogPlaneBestEffort(handler.logger, logrus.WarnLevel, utils.LogPlaneData,
 					logrus.Fields{"event": "model_cooldown", "credential_id": credentialID, "model": model,
-						"cooldown_until": decision.CooldownUntil, "status_code": statusCode}, "Upstream model entered cooldown")
+						"cooldown_until": escalatedUntil, "status_code": statusCode}, "Upstream model entered cooldown")
 			}
 		})
 	case health.EffectCooldownCredential:
 		handler.mutateCredentialForTarget(ref, func() {
-			until := decision.CooldownUntil
+			until := escalatedUntil
 			exists, changed := false, false
 			if credentialVersion == 0 {
 				exists, changed = handler.registry.SetCooldownWithChange(credentialID, until)
@@ -391,6 +400,9 @@ func (handler *Handler) recordCredentialSuccess(ref state.CredentialRef, at time
 			handler.stats.RecordSuccess(ref.ID, at)
 		}
 	})
+	if handler.escalation != nil {
+		handler.escalation.forget(ref.ID, "")
+	}
 }
 
 func (handler *Handler) mutateCredentialForTarget(ref state.CredentialRef, mutate func()) {
