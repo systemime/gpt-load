@@ -21,6 +21,8 @@ export interface HealthCredential {
   groupName: string
   identity: string
   failureCategory: string
+  // failureSummary 是上游返回的原始文案(已脱敏), 分类枚举表达不了时用它兜底展示。
+  failureSummary: string
   statusCode: number | null
   failures: number
   successes: number
@@ -102,6 +104,7 @@ function credential(value: unknown): HealthCredential {
       text(row.credential_connection_type ?? ''),
     ),
     failureCategory: text(row.last_failure_category),
+    failureSummary: text(row.last_failure_summary ?? ''),
     statusCode: timestamp(row.last_status_code),
     failures: integer(row.failure_count),
     successes: integer(row.recent_success_count),

@@ -107,6 +107,7 @@ function period(seconds: number): string {
               t('health.kinds.' + issue.kind)
             }}</AppBadge>
             <p>{{ issue.reason }}</p>
+            <p v-if="issue.detail" class="modern-health-secondary">{{ issue.detail }}</p>
             <span class="modern-health-detail-impact">{{ issue.impact }}</span>
           </section>
           <AppFormSection :title="t('health.recoverySection')">

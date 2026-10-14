@@ -343,7 +343,7 @@ func (handler *Handler) applyDecisionEffectWithBlacklistPolicy(
 		handler.mutateCredentialForTarget(ref, func() {
 			accepted, changed := handler.registry.SetModelCooldown(ref, model, escalatedUntil, attemptNow)
 			if accepted {
-				handler.stats.RecordProblem(credentialID, decision.Category, statusCode, attemptNow)
+				handler.stats.RecordProblem(credentialID, decision.Category, statusCode, decision.Summary, attemptNow)
 			}
 			if changed {
 				utils.LogPlaneBestEffort(handler.logger, logrus.WarnLevel, utils.LogPlaneData,
@@ -367,7 +367,7 @@ func (handler *Handler) applyDecisionEffectWithBlacklistPolicy(
 			if !exists {
 				return
 			}
-			handler.stats.RecordProblem(credentialID, decision.Category, statusCode, attemptNow)
+			handler.stats.RecordProblem(credentialID, decision.Category, statusCode, decision.Summary, attemptNow)
 			if changed {
 				handler.logCredentialCooldown(credentialID, decision.Category, statusCode)
 			}
@@ -386,7 +386,7 @@ func (handler *Handler) applyDecisionEffectWithBlacklistPolicy(
 					return
 				}
 			}
-			handler.stats.RecordFailure(credentialID, decision.Category, statusCode, attemptNow)
+			handler.stats.RecordFailure(credentialID, decision.Category, statusCode, decision.Summary, attemptNow)
 			if becameBlacklisted {
 				handler.logCredentialBlacklisted(credentialID, count, decision.Category, statusCode)
 			}

@@ -197,7 +197,7 @@ func TestFileRuntimeStateCheckpointRestoresAndConsumesFile(t *testing.T) {
 	registry.SetBlacklisted(1)
 	registry.IncrFailure(1)
 	stats := health.NewStatsStore()
-	stats.RecordFailure(1, health.FailureCategoryUpstreamHostError, 503, time.Date(2026, 8, 7, 11, 59, 0, 0, time.UTC))
+	stats.RecordFailure(1, health.FailureCategoryUpstreamHostError, 503, "", time.Date(2026, 8, 7, 11, 59, 0, 0, time.UTC))
 
 	checkpoint := NewFileRuntimeStateCheckpoint(dataDir, registry, stats, nil)
 	if err := checkpoint.Save(context.Background()); err != nil {

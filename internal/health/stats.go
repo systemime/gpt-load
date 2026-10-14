@@ -19,6 +19,8 @@ type CredentialStats struct {
 	ConsecutiveProblem  uint64
 	LastFailureCategory FailureCategory
 	LastStatusCode      int
+	// LastFailureSummary 是上游返回的原始文案(已脱敏), 管理面据此显示具体原因。
+	LastFailureSummary string
 }
 
 type StatsStore struct {
@@ -42,6 +44,7 @@ type credentialStatsWindow struct {
 	lastEventRecorded   bool
 	lastFailureCategory FailureCategory
 	lastStatusCode      int
+	lastFailureSummary  string
 }
 
 type statsEvent uint8
@@ -57,25 +60,27 @@ func NewStatsStore() *StatsStore {
 }
 
 func (store *StatsStore) RecordSuccess(credentialID uint, at time.Time) {
-	store.record(credentialID, statsEventSuccess, FailureCategoryOK, 0, at)
+	store.record(credentialID, statsEventSuccess, FailureCategoryOK, 0, "", at)
 }
 
 func (store *StatsStore) RecordFailure(
 	credentialID uint,
 	category FailureCategory,
 	statusCode int,
+	summary string,
 	at time.Time,
 ) {
-	store.record(credentialID, statsEventFailure, category, statusCode, at)
+	store.record(credentialID, statsEventFailure, category, statusCode, summary, at)
 }
 
 func (store *StatsStore) RecordProblem(
 	credentialID uint,
 	category FailureCategory,
 	statusCode int,
+	summary string,
 	at time.Time,
 ) {
-	store.record(credentialID, statsEventProblem, category, statusCode, at)
+	store.record(credentialID, statsEventProblem, category, statusCode, summary, at)
 }
 
 func (store *StatsStore) record(
@@ -83,6 +88,7 @@ func (store *StatsStore) record(
 	event statsEvent,
 	category FailureCategory,
 	statusCode int,
+	summary string,
 	at time.Time,
 ) {
 	if credentialID == 0 {
@@ -127,6 +133,7 @@ func (store *StatsStore) record(
 		window.consecutiveProblem = 0
 		window.lastFailureCategory = FailureCategoryAmbiguous
 		window.lastStatusCode = 0
+		window.lastFailureSummary = ""
 		return
 	}
 	if event == statsEventFailure {
@@ -135,6 +142,7 @@ func (store *StatsStore) record(
 	window.consecutiveProblem++
 	window.lastFailureCategory = category
 	window.lastStatusCode = statusCode
+	window.lastFailureSummary = summary
 }
 
 func (store *StatsStore) Reset(credentialID uint) {
@@ -161,6 +169,7 @@ func (store *StatsStore) ClearProblemState(credentialID uint) {
 	window.consecutiveProblem = 0
 	window.lastFailureCategory = FailureCategoryAmbiguous
 	window.lastStatusCode = 0
+	window.lastFailureSummary = ""
 }
 
 func (store *StatsStore) Snapshot(credentialID uint, now time.Time) CredentialStats {
@@ -182,6 +191,7 @@ func (store *StatsStore) Snapshot(credentialID uint, now time.Time) CredentialSt
 		ConsecutiveProblem:  window.consecutiveProblem,
 		LastFailureCategory: window.lastFailureCategory,
 		LastStatusCode:      window.lastStatusCode,
+		LastFailureSummary:  window.lastFailureSummary,
 	}
 	firstMinute := currentMinute - (statsBucketCount - 1)
 	for _, bucket := range window.buckets {

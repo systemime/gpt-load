@@ -247,3 +247,30 @@ func TestNormalizeUpstreamResultContractFailsClosedWithoutBodyInference(t *testi
 		}
 	}
 }
+
+func TestVendorErrorSummaryKeepsUpstreamTextAndDropsGenericFallback(t *testing.T) {
+	t.Parallel()
+
+	const quota = "已达到 5 小时使用上限，2026-10-14 19:08:33 后可继续使用"
+	rateLimited := UpstreamResult{StatusCode: http.StatusTooManyRequests, ErrorSummary: quota}
+	if got := vendorErrorSummary(rateLimited, health.FailureCategoryRateLimited); got != quota {
+		t.Fatalf("vendor summary = %q, want upstream text", got)
+	}
+	generic := UpstreamResult{
+		StatusCode:   http.StatusTooManyRequests,
+		ErrorSummary: fixedErrorSummary("upstream_rate_limited"),
+	}
+	if got := vendorErrorSummary(generic, health.FailureCategoryRateLimited); got != "" {
+		t.Fatalf("generic summary = %q, want empty", got)
+	}
+	if got := vendorErrorSummary(UpstreamResult{}, health.FailureCategoryRateLimited); got != "" {
+		t.Fatalf("empty summary = %q, want empty", got)
+	}
+	fromStream := UpstreamResult{
+		StatusCode: http.StatusTooManyRequests,
+		Stream:     StreamObservation{ErrorSummary: quota},
+	}
+	if got := vendorErrorSummary(fromStream, health.FailureCategoryRateLimited); got != quota {
+		t.Fatalf("stream vendor summary = %q, want upstream text", got)
+	}
+}

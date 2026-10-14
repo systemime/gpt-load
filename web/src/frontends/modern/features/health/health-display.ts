@@ -16,6 +16,8 @@ export interface HealthIssue {
   severity: 'danger' | 'warning'
   priority: number
   reason: string
+  // detail 是上游返回的原始文案, 有则展示; 分类枚举只有"未明确归类的异常"时尤其需要。
+  detail?: string
   impact: string
   recovery: string
   recoveryAt: number | null
@@ -80,6 +82,7 @@ export function healthIssues(
         severity: kind === 'isolated' ? 'danger' : 'warning',
         priority: unavailable.has(row.groupID) ? 1 : kind === 'isolated' ? 3 : 4,
         reason: t('health.failures.' + row.failureCategory),
+        detail: row.failureSummary,
         impact: t('health.impacts.credential'),
         recovery: t('health.recovery.' + row.recovery),
         recoveryAt: row.recoveryAt,

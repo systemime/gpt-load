@@ -709,7 +709,7 @@ func TestGatewayFailureAndValidationRecoveryFailureFirstKeepsRegistryAndStatsFai
 		releaseFailure:     make(chan struct{}),
 	}
 	stats := health.NewStatsStore()
-	stats.RecordFailure(1, health.FailureCategoryAmbiguous, 0, now)
+	stats.RecordFailure(1, health.FailureCategoryAmbiguous, 0, "", now)
 	mutations := health.NewMutationCoordinator()
 	handler := &Handler{registry: registry, stats: stats, mutations: mutations}
 
@@ -764,7 +764,7 @@ func TestGatewayFailureAndValidationRecoveryRecoveryFirstLeavesNewFailure(t *tes
 	}
 	ref := registry.BlacklistedCredentials()[0]
 	stats := health.NewStatsStore()
-	stats.RecordFailure(1, health.FailureCategoryAmbiguous, 0, now)
+	stats.RecordFailure(1, health.FailureCategoryAmbiguous, 0, "", now)
 	mutations := health.NewMutationCoordinator()
 	handler := &Handler{registry: registry, stats: stats, mutations: mutations}
 
@@ -994,6 +994,7 @@ func TestHandlerRecordsNonStreamingResultStatsByAction(t *testing.T) {
 				ConsecutiveProblem:  1,
 				LastFailureCategory: health.FailureCategoryInvalidKey,
 				LastStatusCode:      http.StatusUnauthorized,
+				LastFailureSummary:  "invalid key",
 			},
 		},
 		{
@@ -1015,6 +1016,7 @@ func TestHandlerRecordsNonStreamingResultStatsByAction(t *testing.T) {
 				ConsecutiveProblem:  1,
 				LastFailureCategory: health.FailureCategoryRateLimited,
 				LastStatusCode:      http.StatusTooManyRequests,
+				LastFailureSummary:  "rate limit",
 			},
 		},
 		{
@@ -1100,6 +1102,7 @@ func TestHandlerRecordsInvalidKeyPerAttempt(t *testing.T) {
 		ConsecutiveProblem:  1,
 		LastFailureCategory: health.FailureCategoryInvalidKey,
 		LastStatusCode:      http.StatusUnauthorized,
+		LastFailureSummary:  "invalid key",
 	}) {
 		t.Fatalf("first key stats = %#v, want one failure", got)
 	}

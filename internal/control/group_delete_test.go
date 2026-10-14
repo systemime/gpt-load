@@ -290,7 +290,7 @@ func TestDeleteGroupAcceptsRegistryAlreadyAtTargetStateAndRetainsHistory(t *test
 		t.Fatal(err)
 	}
 	now := time.Date(2026, time.July, 24, 16, 0, 0, 0, time.UTC)
-	fixture.stats.RecordFailure(key.ID, health.FailureCategoryAmbiguous, 0, now)
+	fixture.stats.RecordFailure(key.ID, health.FailureCategoryAmbiguous, 0, "", now)
 	beforeStats := fixture.stats.Snapshot(key.ID, now)
 	if err := fixture.db.Create(&models.RequestLog{
 		ID: "delete-history-log", CompletedAtMS: now.UnixMilli(), AccessKeyID: 1,

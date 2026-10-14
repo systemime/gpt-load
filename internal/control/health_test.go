@@ -100,8 +100,9 @@ func TestRuntimeHealthReturnsMutuallyExclusiveCurrentState(t *testing.T) {
 		t.Fatalf("Replace() error = %v", err)
 	}
 	fixture.stats.RecordSuccess(12, now)
-	fixture.stats.RecordProblem(12, health.FailureCategoryRateLimited, 429, now)
-	fixture.stats.RecordFailure(13, health.FailureCategoryInvalidKey, 401, now)
+	fixture.stats.RecordProblem(12, health.FailureCategoryRateLimited, 429,
+		"已达到 5 小时使用上限，2026-10-14 19:08:33 后可继续使用", now)
+	fixture.stats.RecordFailure(13, health.FailureCategoryInvalidKey, 401, "", now)
 	fixture.requestLogStats.value = requestlog.Stats{
 		EnqueuedTotal: 100, PersistedTotal: 98,
 		DroppedQueueFullTotal: 1, DroppedPersistFailedTotal: 1,
@@ -149,6 +150,7 @@ func TestRuntimeHealthReturnsMutuallyExclusiveCurrentState(t *testing.T) {
 	if len(got.CooldownCredentials) != 1 || got.CooldownCredentials[0].CredentialID != 12 ||
 		got.CooldownCredentials[0].Identity != "rate****safe" ||
 		got.CooldownCredentials[0].LastFailureCategory != "rate_limited" ||
+		got.CooldownCredentials[0].LastFailureSummary != "已达到 5 小时使用上限，2026-10-14 19:08:33 后可继续使用" ||
 		got.CooldownCredentials[0].LastStatusCode == nil ||
 		*got.CooldownCredentials[0].LastStatusCode != 429 ||
 		got.CooldownCredentials[0].RecentSuccessCount != 1 ||
@@ -194,7 +196,7 @@ func TestRuntimeHealthAdvertisesExecutorValidationForChannelCredential(t *testin
 	}}); err != nil {
 		t.Fatalf("Replace() error = %v", err)
 	}
-	fixture.stats.RecordFailure(11, health.FailureCategoryInvalidKey, 401, now)
+	fixture.stats.RecordFailure(11, health.FailureCategoryInvalidKey, 401, "", now)
 
 	got, err := fixture.service.RuntimeHealth()
 	if err != nil {
@@ -227,8 +229,8 @@ func TestRuntimeHealthExposesProblemCountsInsteadOfFailureAliases(t *testing.T) 
 		t.Fatalf("Replace() error = %v", err)
 	}
 	fixture.stats.RecordSuccess(11, now.Add(-2*time.Minute))
-	fixture.stats.RecordProblem(11, health.FailureCategoryRateLimited, 429, now.Add(-time.Minute))
-	fixture.stats.RecordFailure(11, health.FailureCategoryInvalidKey, 401, now)
+	fixture.stats.RecordProblem(11, health.FailureCategoryRateLimited, 429, "", now.Add(-time.Minute))
+	fixture.stats.RecordFailure(11, health.FailureCategoryInvalidKey, 401, "", now)
 
 	result, err := fixture.service.RuntimeHealth()
 	if err != nil {

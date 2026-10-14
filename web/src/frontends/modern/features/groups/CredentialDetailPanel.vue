@@ -109,7 +109,12 @@ const proxyOptions = computed(() => [
 function failure(): string {
   if (!item.value.failures) return '—'
   const key = 'credentialCards.failures.' + item.value.failureCategory
-  return [te(key) ? t(key) : item.value.failureCategory, item.value.lastStatusCode]
+  // 分类枚举说不清时补上上游原文, 例如额度耗尽的具体恢复时间。
+  return [
+    te(key) ? t(key) : item.value.failureCategory,
+    item.value.failureSummary,
+    item.value.lastStatusCode,
+  ]
     .filter(Boolean)
     .join(' · ')
 }

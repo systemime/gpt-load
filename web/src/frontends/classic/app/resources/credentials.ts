@@ -117,6 +117,7 @@ const credentialItemFields = [
   'recent_failure_count',
   'consecutive_failure_count',
   'last_failure_category',
+  'last_failure_summary',
   'last_status_code',
   'cooldown_until_ms',
   'last_used_at_ms',

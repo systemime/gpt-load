@@ -52,6 +52,7 @@ type healthProblemCredentialResponse struct {
 	GroupName               string                 `json:"group_name"`
 	Identity                string                 `json:"identity"`
 	LastFailureCategory     string                 `json:"last_failure_category"`
+	LastFailureSummary      string                 `json:"last_failure_summary"`
 	LastStatusCode          *int                   `json:"last_status_code"`
 	CooldownUntilMS         *int64                 `json:"cooldown_until_ms"`
 	FailureCount            int                    `json:"failure_count"`
@@ -375,6 +376,7 @@ func (service *Service) RuntimeHealth() (runtimeHealthResponse, error) {
 			GroupName:               group.Name,
 			Identity:                identity,
 			LastFailureCategory:     lastFailureCategory.String(),
+			LastFailureSummary:      stats.LastFailureSummary,
 			LastStatusCode:          optionalHealthStatusCode(lastStatusCode),
 			FailureCount:            key.FailureCount,
 			RecentSuccessCount:      stats.Success,

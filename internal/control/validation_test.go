@@ -775,7 +775,7 @@ func TestValidationWorkerFailureGenerationChangesDuringProbeRejectsRecovery(t *t
 		t.Fatalf("Replace() error = %v", err)
 	}
 	stats := health.NewStatsStore()
-	stats.RecordFailure(7, health.FailureCategoryAmbiguous, 0, now)
+	stats.RecordFailure(7, health.FailureCategoryAmbiguous, 0, "", now)
 	probeStarted := make(chan struct{})
 	releaseProbe := make(chan struct{})
 	worker := &validationWorker{
@@ -1016,7 +1016,7 @@ func TestValidationWorkerPublicationBoundaryBlocksPublishThroughRecoverAndReset(
 	}
 	stats := health.NewStatsStore()
 	now := time.Date(2026, time.July, 27, 12, 0, 0, 0, time.UTC)
-	stats.RecordFailure(7, health.FailureCategoryAmbiguous, 0, now)
+	stats.RecordFailure(7, health.FailureCategoryAmbiguous, 0, "", now)
 	snapshots := &observableValidationSnapshotSource{manager: manager}
 	blockingRegistry := &publicationValidationRegistry{
 		delegate:              registry,

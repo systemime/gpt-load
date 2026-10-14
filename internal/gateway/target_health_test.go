@@ -115,7 +115,7 @@ func TestHandlerHealthEffectsRespectSelectedTarget(t *testing.T) {
 							}
 							for range 2 {
 								registry.IncrFailure(1)
-								handler.stats.RecordFailure(1, health.FailureCategoryInvalidKey, http.StatusUnauthorized, now)
+								handler.stats.RecordFailure(1, health.FailureCategoryInvalidKey, http.StatusUnauthorized, "", now)
 							}
 							before = registry.Snapshot()[0]
 							beforeStats = handler.stats.Snapshot(1, now)

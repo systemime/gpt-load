@@ -408,6 +408,7 @@ func TestUpdateGroupTargetResetsCredentialHealthIdentity(t *testing.T) {
 		credential.ID,
 		health.FailureCategoryUpstreamHostError,
 		http.StatusBadGateway,
+		"",
 		now,
 	)
 

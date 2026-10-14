@@ -49,7 +49,7 @@ func TestBatchRestoreAllCredentialsPreservesConfigurationAndHistory(t *testing.T
 	for _, row := range rows {
 		fixture.registry.IncrFailure(row.ID)
 		fixture.stats.RecordSuccess(row.ID, now.Add(-time.Second))
-		fixture.stats.RecordFailure(row.ID, health.FailureCategoryInvalidKey, 401, now)
+		fixture.stats.RecordFailure(row.ID, health.FailureCategoryInvalidKey, 401, "", now)
 	}
 	beforeRows := batchRestoreRows(t, fixture, groupID)
 	beforeViews := fixture.registry.Snapshot()

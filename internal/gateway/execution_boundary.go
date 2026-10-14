@@ -133,7 +133,32 @@ func judgeUpstreamResult(
 		decision.Effect = health.EffectNone
 		decision.CooldownUntil = time.Time{}
 	}
+	decision.Summary = vendorErrorSummary(result, decision.Category)
 	return decision
+}
+
+// vendorErrorSummary 取上游返回的原始文案。分类枚举只能落到"限流/未明确归类",
+// 厂商实际会写"已达到 5 小时使用上限, ... 后可继续使用", 这层文案只有 evidence
+// 里有。通用兜底句(如 "Upstream rate limited the request.")不算上游文案, 丢弃。
+func vendorErrorSummary(result UpstreamResult, category health.FailureCategory) string {
+	fallbacks := make(map[string]struct{}, 2)
+	for _, fallback := range []string{
+		fixedErrorSummary(upstreamErrorCode(result, category)),
+		fixedErrorSummary(streamErrorCode(result.Stream.EndReason)),
+	} {
+		fallbacks[fallback] = struct{}{}
+	}
+	for _, candidate := range []string{result.ErrorSummary, result.Stream.ErrorSummary} {
+		summary := strings.TrimSpace(candidate)
+		if summary == "" {
+			continue
+		}
+		if _, generic := fallbacks[summary]; generic {
+			continue
+		}
+		return summary
+	}
+	return ""
 }
 
 func decisionEvidence(result UpstreamResult) (*execution.ErrorEvidence, error) {

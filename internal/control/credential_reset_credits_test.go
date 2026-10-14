@@ -333,7 +333,7 @@ func TestConsumeCredentialResetCreditRestoresRuntimeHealth(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	fixture.stats.RecordFailure(credentialID, health.FailureCategoryRateLimited, http.StatusTooManyRequests, now)
+	fixture.stats.RecordFailure(credentialID, health.FailureCategoryRateLimited, http.StatusTooManyRequests, "", now)
 	if !fixture.registry.SetCooldown(credentialID, now.Add(time.Hour)) ||
 		!fixture.registry.SetBlacklisted(credentialID) {
 		t.Fatal("seed credential runtime health state")

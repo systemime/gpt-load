@@ -285,6 +285,7 @@ func TestGroupCredentialProbeDoesNotMutateDisabledCooldownOrBlacklistedState(t *
 					credentialID,
 					health.FailureCategoryInvalidKey,
 					http.StatusUnauthorized,
+					"",
 					time.Now(),
 				)
 			},
@@ -456,6 +457,7 @@ func TestRestoreTestedGroupCredentialRequiresMatchingProofAndRestoresAtomically(
 		credential.ID,
 		health.FailureCategoryInvalidKey,
 		http.StatusUnauthorized,
+		"",
 		observedAt,
 	)
 	fixture.service.executor = &credentialProbeTestExecutor{result: successfulCredentialProbeResult()}

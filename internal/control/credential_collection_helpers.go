@@ -150,6 +150,7 @@ func mapCredentialRuntimeItem(
 		RecentFailureCount:        stats.Failure,
 		ConsecutiveFailureCount:   stats.ConsecutiveFailure,
 		LastFailureCategory:       normalizeCredentialFailureCategory(stats.LastFailureCategory).String(),
+		LastFailureSummary:        stats.LastFailureSummary,
 		LastStatusCode:            optionalHealthStatusCode(stats.LastStatusCode),
 	}
 	limits, err := modelCooldownResponses(view.ModelCooldowns, observedAt)

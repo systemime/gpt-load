@@ -24,6 +24,7 @@ type StatsRuntimeCheckpoint struct {
 	LastEventRecorded   bool                    `json:"last_event_recorded"`
 	LastFailureCategory FailureCategory         `json:"last_failure_category"`
 	LastStatusCode      int                     `json:"last_status_code"`
+	LastFailureSummary  string                  `json:"last_failure_summary"`
 }
 
 // CaptureRuntimeCheckpoint returns detached rolling-window state in stable
@@ -51,6 +52,7 @@ func (store *StatsStore) CaptureRuntimeCheckpoint() []StatsRuntimeCheckpoint {
 			LastEventRecorded:   window.lastEventRecorded,
 			LastFailureCategory: window.lastFailureCategory,
 			LastStatusCode:      window.lastStatusCode,
+			LastFailureSummary:  window.lastFailureSummary,
 		})
 	}
 	store.mu.Unlock()
@@ -79,6 +81,7 @@ func (store *StatsStore) RestoreRuntimeCheckpoint(checkpoints []StatsRuntimeChec
 			lastEventRecorded:   checkpoint.LastEventRecorded,
 			lastFailureCategory: checkpoint.LastFailureCategory,
 			lastStatusCode:      checkpoint.LastStatusCode,
+			lastFailureSummary:  checkpoint.LastFailureSummary,
 		}
 		for _, bucket := range checkpoint.Buckets {
 			if !bucket.Valid {

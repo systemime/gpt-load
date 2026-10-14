@@ -1137,7 +1137,7 @@ func TestContainerHealthEndpointReadsSharedStatsStore(t *testing.T) {
 		}}); replaceErr != nil {
 			t.Fatalf("Replace() error = %v", replaceErr)
 		}
-		stats.RecordFailure(1, health.FailureCategoryAmbiguous, 0, time.Now())
+		stats.RecordFailure(1, health.FailureCategoryAmbiguous, 0, "", time.Now())
 
 		request := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 		request.Header.Set("Authorization", "Bearer test-auth-key")

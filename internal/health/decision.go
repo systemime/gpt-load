@@ -74,6 +74,9 @@ type Decision struct {
 	Effect        Effect
 	CooldownUntil time.Time
 	RuleID        RuleID
+	// Summary 是上游返回的原始文案(已脱敏), 仅供管理面展示"为什么失败"。
+	// 厂商限流/额度类错误常只给一句中文说明, 分类枚举无法表达。
+	Summary string
 }
 
 func (decision Decision) ShouldRetry() bool {

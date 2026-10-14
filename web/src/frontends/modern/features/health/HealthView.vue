@@ -349,8 +349,11 @@ useMessageSource(() =>
             <AppBadge :tone="row.severity" size="xs" dot>{{
               t('health.kinds.' + row.kind)
             }}</AppBadge
-            ><AppOverflowText :text="row.reason" class="modern-health-secondary" />
-          </div>
+            ><AppOverflowText :text="row.reason" class="modern-health-secondary" /><AppOverflowText
+              v-if="row.detail"
+              :text="row.detail"
+              class="modern-health-secondary"
+          /></div>
           <AppOverflowText :text="row.impact" class="modern-health-impact" />
           <div class="modern-health-stack">
             <AppOverflowText :text="row.recovery" /><AppOverflowText

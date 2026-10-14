@@ -100,6 +100,7 @@ const problemCredentialFields = [
   'credential_alias',
   'credential_connection_type',
   'last_failure_category',
+  'last_failure_summary',
   'last_status_code',
 ] as const
 const requestLogFields = [
