@@ -32,7 +32,7 @@ func TestRerankGatewayRoutesObservesAndProtectsAccess(t *testing.T) {
 		{name: "tokens", response: `"usage":{"total_tokens":1000000}`, status: 200, calls: 1, priced: true},
 		{name: "units only", response: `"meta":{"billed_units":{"search_units":1}}`, status: 200, calls: 1},
 		{name: "protocol denied", response: `"usage":{"total_tokens":1}`, filters: state.FilterSet{Protocols: map[protocol.Protocol]struct{}{protocol.OpenAIEmbeddings: {}}}, status: 503},
-		{name: "model denied", response: `"usage":{"total_tokens":1}`, filters: state.FilterSet{Models: map[string]struct{}{"other": {}}}, status: 503},
+		{name: "model denied", response: `"usage":{"total_tokens":1}`, filters: state.FilterSet{Models: map[string]struct{}{"other": {}}}, status: 400},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var calls atomic.Int64

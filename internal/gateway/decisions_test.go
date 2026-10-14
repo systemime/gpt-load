@@ -33,7 +33,7 @@ func TestDecisionsGatewayRoutesObservesAndProtectsAccess(t *testing.T) {
 		{name: "allowed", status: http.StatusOK, calls: 1},
 		{name: "redacted state", status: http.StatusOK, calls: 1, redact: true},
 		{name: "protocol denied", filters: state.FilterSet{Protocols: map[protocol.Protocol]struct{}{protocol.OpenAICompletions: {}}}, status: http.StatusServiceUnavailable},
-		{name: "model denied", filters: state.FilterSet{Models: map[string]struct{}{"other": {}}}, status: http.StatusServiceUnavailable},
+		{name: "model denied", filters: state.FilterSet{Models: map[string]struct{}{"other": {}}}, status: http.StatusBadRequest},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var calls atomic.Int64
