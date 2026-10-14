@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gorm.io/driver/sqlite"
+	"github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
 	gormmysql "gorm.io/driver/mysql"
 	gormpostgres "gorm.io/driver/postgres"
@@ -53,6 +54,12 @@ func (filter databaseLogFilter) Trace(
 		errors.Is(ctx.Err(), context.Canceled) &&
 		errors.Is(err, context.Canceled) {
 		return
+	}
+	// SQLite 瞬时 malformed(11) 自愈事件需要精确错误码定位来源(主库/WAL 索引/系统层)。
+	var sqliteErr sqlite3.Error
+	if errors.As(err, &sqliteErr) {
+		err = fmt.Errorf("%w [sqlite code=%d extended=0x%x system_errno=%d]",
+			err, sqliteErr.Code, sqliteErr.ExtendedCode, sqliteErr.SystemErrno)
 	}
 	filter.Interface.Trace(ctx, begin, query, err)
 }
