@@ -38,6 +38,19 @@ const rate = computed(() => {
     : '—'
 })
 const midpoint = computed(() => (props.report ? (props.report.fromMs + props.report.toMs) / 2 : 0))
+// 跳用量页带上服务端算好的窗口边界: 首页趋势按整点对齐, 浏览器端 preset=24h 会差出
+// 一个小时边界, 同一张卡点进去数字对不上。
+const usageLocation = computed(() =>
+  props.report
+    ? {
+        name: 'modern-usage',
+        query: {
+          from_ms: String(props.report.fromMs),
+          to_ms: String(props.report.toMs),
+        },
+      }
+    : { name: 'modern-usage', query: { preset: '24h' } },
+)
 function endpointLabel(value: number): string {
   const current = new Date(props.report?.observedAt ?? value)
   const date = new Date(value).toDateString()
@@ -52,10 +65,7 @@ function endpointLabel(value: number): string {
 <template>
   <AppPanel :title="t('home.trend')" :description="t('home.trendWindow')" compact>
     <template #actions>
-      <HomeSectionLink
-        :to="{ name: 'modern-usage', query: { preset: '24h' } }"
-        :label="t('pages.usage.title')"
-      />
+      <HomeSectionLink :to="usageLocation" :label="t('pages.usage.title')" />
     </template>
     <div v-if="failed" class="modern-home-trend-state" role="status">
       <span>{{ t(report ? 'home.refreshFailed' : 'home.trendFailed') }}</span>

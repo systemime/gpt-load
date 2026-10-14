@@ -15,6 +15,8 @@ const segments = computed(() => [
   { key: 'available', value: props.report.counts.available, tone: 'success' as const },
   { key: 'cooldown', value: props.report.counts.cooldown, tone: 'warning' as const },
   { key: 'isolated', value: props.report.counts.blacklisted, tone: 'danger' as const },
+  // 停用账号补足分母: 与首页/分组页的总数口径一致。
+  { key: 'disabled', value: props.report.counts.disabled, tone: 'neutral' as const },
 ])
 const hint = computed(() =>
   segments.value.map((item) => `${t('health.' + item.key)} ${count(item.value)}`).join(' · '),

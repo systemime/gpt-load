@@ -129,7 +129,8 @@ func TestRuntimeHealthReturnsMutuallyExclusiveCurrentState(t *testing.T) {
 		t.Fatalf("access quota checkpoint health = %#v", got.RequestLog)
 	}
 	wantCounts := healthCountsResponse{
-		Credentials: 3, Available: 1, Cooldown: 1, Blacklisted: 1,
+		// 分母含停用分组/权重0 分组里的凭据, 与首页/分组页的总数口径一致。
+		Credentials: 7, Available: 1, Cooldown: 1, Blacklisted: 1, Disabled: 4,
 	}
 	if got.Counts != wantCounts {
 		t.Fatalf("global counts = %#v, want %#v", got.Counts, wantCounts)
@@ -139,11 +140,12 @@ func TestRuntimeHealthReturnsMutuallyExclusiveCurrentState(t *testing.T) {
 		t.Fatalf("group order = %#v", got.Groups)
 	}
 	if got.Groups[0].Counts.healthCountsResponse != (healthCountsResponse{
-		Credentials: 3, Available: 1, Cooldown: 1, Blacklisted: 1,
+		Credentials: 5, Available: 1, Cooldown: 1, Blacklisted: 1, Disabled: 2,
 	}) {
 		t.Fatalf("active group counts = %#v", got.Groups[0].Counts)
 	}
-	if got.Groups[1].Counts.Credentials != 0 || got.Groups[2].Counts.Credentials != 0 ||
+	if got.Groups[1].Counts.Credentials != 1 || got.Groups[1].Counts.Disabled != 1 ||
+		got.Groups[2].Counts.Credentials != 1 || got.Groups[2].Counts.Disabled != 1 ||
 		got.Groups[3].Counts.Credentials != 0 {
 		t.Fatalf("disabled/zero/empty group counts = %#v", got.Groups)
 	}

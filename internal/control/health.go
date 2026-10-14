@@ -25,6 +25,9 @@ type healthCountsResponse struct {
 	Available   int `json:"available"`
 	Cooldown    int `json:"cooldown"`
 	Blacklisted int `json:"blacklisted"`
+	// Disabled 与首页/分组页的总数口径对齐: 分母(_credentials)覆盖全部凭据,
+	// 停用的单列一段, 不再让健康页 7/8 与首页 7/10 各说各话。
+	Disabled int `json:"disabled"`
 }
 
 type healthGroupCountsResponse struct {
@@ -167,16 +170,16 @@ func classifyHealthKey(
 }
 
 func addHealthCount(counts *healthCountsResponse, bucket healthBucket) {
+	counts.Credentials++
 	switch bucket {
 	case healthBucketAvailable:
-		counts.Credentials++
 		counts.Available++
 	case healthBucketCooldown:
-		counts.Credentials++
 		counts.Cooldown++
 	case healthBucketBlacklisted:
-		counts.Credentials++
 		counts.Blacklisted++
+	case healthBucketDisabled:
+		counts.Disabled++
 	}
 }
 

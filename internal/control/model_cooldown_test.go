@@ -165,7 +165,9 @@ func TestRuntimeHealthCountsModelCooldownWhenGroupIsDisabled(t *testing.T) {
 				if len(got.Groups) != 1 || got.Groups[0].Counts.ModelCooldown != 1 {
 					t.Fatalf("model cooldown disappeared after group enabled=%t: %#v", enabled, got)
 				}
-				if len(got.Groups) != 1 || got.Groups[0].Enabled != enabled || (got.Counts.Credentials > 0) != enabled {
+				// 分母恒为全部凭据; 分组停用只把凭据从 available 挪进 disabled 段。
+				if len(got.Groups) != 1 || got.Groups[0].Enabled != enabled ||
+					got.Counts.Credentials != 1 || (got.Counts.Disabled == 1) != !enabled {
 					t.Fatalf("group health changed: %#v", got)
 				}
 			}

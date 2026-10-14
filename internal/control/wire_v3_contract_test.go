@@ -91,7 +91,7 @@ func TestHealthAndRouteInspectionUseCredentialWireNames(t *testing.T) {
 		t.Fatalf("json.Marshal(health) error = %v", err)
 	}
 	for _, token := range []string{
-		`"counts":{"credentials":1,"available":1,"cooldown":0,"blacklisted":0}`,
+		`"counts":{"credentials":1,"available":1,"cooldown":0,"blacklisted":0,"disabled":0}`,
 		`"cooldown_credentials":[{"credential_id":7`,
 		`"blacklisted_credentials":[]`,
 	} {
@@ -100,7 +100,9 @@ func TestHealthAndRouteInspectionUseCredentialWireNames(t *testing.T) {
 		}
 	}
 	for _, legacy := range []string{
-		`"total"`, `"disabled"`, `"cooldown_keys"`, `"blacklisted_keys"`, `"key_id"`,
+		// "disabled" 不再列入: counts.disabled 是现行字段(停用凭据计数),
+		// 历史上被移除的是顶层同名布尔。
+		`"total"`, `"cooldown_keys"`, `"blacklisted_keys"`, `"key_id"`,
 	} {
 		if strings.Contains(string(healthBody), legacy) {
 			t.Fatalf("health wire exposes legacy field %s: %s", legacy, healthBody)

@@ -8,6 +8,7 @@ export interface HealthCounts {
   available: number
   cooldown: number
   blacklisted: number
+  disabled: number
 }
 export interface HealthGroup {
   id: number
@@ -86,8 +87,12 @@ function counts(value: unknown): HealthCounts {
     available: integer(row.available),
     cooldown: integer(row.cooldown),
     blacklisted: integer(row.blacklisted),
+    disabled: integer(row.disabled),
   }
-  if (result.credentials !== result.available + result.cooldown + result.blacklisted)
+  if (
+    result.credentials !==
+    result.available + result.cooldown + result.blacklisted + result.disabled
+  )
     throw new InvalidResponseError()
   return result
 }

@@ -41,7 +41,7 @@ export type {
   RuntimeHealthDto,
 } from '@/api/control/types'
 
-const countFields = ['credentials', 'available', 'cooldown', 'blacklisted'] as const
+const countFields = ['credentials', 'available', 'cooldown', 'blacklisted', 'disabled'] as const
 const healthFields = [
   'observed_at_ms',
   'version',
@@ -166,8 +166,12 @@ export function projectHealthCounts(value: unknown): HealthCredentialCountsDto {
     available: projectSafeInteger(record.available, { minimum: 0 }),
     cooldown: projectSafeInteger(record.cooldown, { minimum: 0 }),
     blacklisted: projectSafeInteger(record.blacklisted, { minimum: 0 }),
+    disabled: projectSafeInteger(record.disabled, { minimum: 0 }),
   }
-  if (result.credentials !== result.available + result.cooldown + result.blacklisted) {
+  if (
+    result.credentials !==
+    result.available + result.cooldown + result.blacklisted + result.disabled
+  ) {
     invalidResponse()
   }
   return result

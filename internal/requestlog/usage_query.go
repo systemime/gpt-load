@@ -39,6 +39,8 @@ func (service *Service) QueryUsage(ctx context.Context, input UsageQuery) (Usage
 	}, func(connection *gorm.DB) error {
 		scope := usageWindowScope(connection, input)
 		// 5 分钟趋势不能由小时汇总还原；总览、趋势与分布共用请求明细来源。
+		// 两条路径的行过滤(attempt_count>0、排除 web_search、usage_state 投影)与
+		// 聚合写入侧一致, 换粒度只有 usage_stats 落库滞后造成的秒级差异。
 		if bucketWidthMS == UsageFiveMinuteBucketMS {
 			scope = usageRequestLogScope(connection, input)
 		}

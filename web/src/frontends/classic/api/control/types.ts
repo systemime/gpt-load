@@ -434,6 +434,7 @@ export interface HealthCredentialCountsDto {
   available: number
   cooldown: number
   blacklisted: number
+  disabled: number
 }
 
 export interface HealthGroupDto {
