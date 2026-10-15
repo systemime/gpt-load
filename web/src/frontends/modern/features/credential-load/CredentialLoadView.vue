@@ -11,6 +11,7 @@ import {
   type CredentialLoadItem,
   type CredentialLoadWindowKey,
 } from '@modern/api/credential-load'
+import LoadHistoryChart from './LoadHistoryChart.vue'
 import { useApiClient } from '@shared/http/client-context'
 import { usePageRefresh } from '@modern/app/page-refresh'
 import { useMessageSource } from '@modern/app/messages'
@@ -267,115 +268,14 @@ function quotaTone(ratio: number): 'ok' | 'warn' | 'high' {
         </div>
       </div>
 
+      <!-- 5 分钟实时折线: 并发/排队(左轴) + 无感转移(右轴), 服务端 1s 采样 -->
+      <LoadHistoryChart
+        v-if="report"
+        :samples="report.history"
+        :capacity="totals?.capacity ?? 0"
+      />
+
       <div class="modern-credential-load__chain">
-        <!-- 用户密钥层: 流量入口 -->
-        <section class="modern-credential-load__tier">
-          <div class="modern-credential-load__tier-head">
-            <span class="modern-credential-load__tier-badge">{{ t('credentialLoad.tierAccessKeys') }}</span>
-            <span class="modern-credential-load__tier-agg">
-              {{ accessRows.length }} · {{ t('credentialLoad.columns.requests') }} {{ formatTokens(totals?.requests ?? 0) }}
-            </span>
-          </div>
-          <div
-            v-if="accessRows.length > 0"
-            class="modern-credential-load__table modern-credential-load__table--access"
-            role="table"
-          >
-            <div class="modern-credential-load__row modern-credential-load__row--head" role="row">
-              <span role="columnheader">{{ t('credentialLoad.person') }}</span>
-              <span
-                v-for="column in (['requests','successRate','affinity','tokens','cacheRead'] as const)"
-                :key="column"
-                role="columnheader"
-                class="modern-credential-load__num"
-              >
-                {{ t(`credentialLoad.columns.${column}`) }}
-              </span>
-              <span role="columnheader">{{ t('credentialLoad.columns.status') }}</span>
-            </div>
-            <div v-for="{ item, stats } in accessRows" :key="item.id" class="modern-credential-load__row" role="row">
-              <span role="cell" class="modern-credential-load__name">
-                <AppButton variant="text" @click="openAccessKeyDetail(item.id)">{{ displayName(item) }}</AppButton>
-              </span>
-              <span role="cell" class="modern-credential-load__num modern-credential-load__req">
-                <span class="modern-credential-load__bar" aria-hidden="true">
-                  <span class="modern-credential-load__bar-fill" :style="{ width: `${barPercent(stats.requests, accessMax)}%` }"></span>
-                </span>
-                {{ stats.requests }}
-              </span>
-              <span role="cell" class="modern-credential-load__num">{{ ratio(stats.success, stats.requests) }}</span>
-              <span role="cell" class="modern-credential-load__num">{{ ratio(stats.affinityHits, stats.requests) }}</span>
-              <span role="cell" class="modern-credential-load__num">
-                {{ formatTokens(stats.uncachedInputTokens + stats.outputTokens) }}
-              </span>
-              <span role="cell" class="modern-credential-load__num">{{ formatTokens(stats.cacheReadTokens) }}</span>
-              <span role="cell">
-                <span
-                  class="modern-credential-load__chip"
-                  :class="stats.requests > 0 ? 'modern-credential-load__chip--ok' : 'modern-credential-load__chip--idle'"
-                >
-                  {{ stats.requests > 0 ? t('credentialLoad.keyActive') : t('credentialLoad.keyIdle') }}
-                </span>
-              </span>
-            </div>
-          </div>
-          <p v-else class="modern-credential-load__empty">{{ t('credentialLoad.empty') }}</p>
-        </section>
-
-        <div class="modern-credential-load__connector" aria-hidden="true">
-          <span class="modern-credential-load__connector-arrow">↓</span>
-          <span class="modern-credential-load__connector-label">{{ t('credentialLoad.routeHint') }}</span>
-        </div>
-
-        <!-- 分组层: 路由容器 -->
-        <section class="modern-credential-load__tier">
-          <div class="modern-credential-load__tier-head">
-            <span class="modern-credential-load__tier-badge">{{ t('credentialLoad.tierGroups') }}</span>
-            <span class="modern-credential-load__tier-agg">
-              {{ groupRows.length }} · {{ t('credentialLoad.columns.requests') }} {{ formatTokens(totals?.requests ?? 0) }}
-            </span>
-          </div>
-          <div
-            v-if="groupRows.length > 0"
-            class="modern-credential-load__table modern-credential-load__table--groups"
-            role="table"
-          >
-            <div class="modern-credential-load__row modern-credential-load__row--head" role="row">
-              <span role="columnheader">{{ t('credentialLoad.group') }}</span>
-              <span
-                v-for="column in (['requests','successRate','tokens','cacheRead'] as const)"
-                :key="column"
-                role="columnheader"
-                class="modern-credential-load__num"
-              >
-                {{ t(`credentialLoad.columns.${column}`) }}
-              </span>
-            </div>
-            <div v-for="{ item, stats } in groupRows" :key="item.id" class="modern-credential-load__row" role="row">
-              <span role="cell" class="modern-credential-load__name">
-                <AppButton variant="text" @click="openGroupDetail(item.id)">{{ displayName(item) }}</AppButton>
-              </span>
-              <span role="cell" class="modern-credential-load__num modern-credential-load__req">
-                <span class="modern-credential-load__bar" aria-hidden="true">
-                  <span class="modern-credential-load__bar-fill" :style="{ width: `${barPercent(stats.requests, groupRows[0].stats.requests)}%` }"></span>
-                </span>
-                {{ stats.requests }}
-              </span>
-              <span role="cell" class="modern-credential-load__num">{{ ratio(stats.success, stats.requests) }}</span>
-              <span role="cell" class="modern-credential-load__num">
-                {{ formatTokens(stats.uncachedInputTokens + stats.outputTokens) }}
-              </span>
-              <span role="cell" class="modern-credential-load__num">{{ formatTokens(stats.cacheReadTokens) }}</span>
-            </div>
-          </div>
-          <p v-else class="modern-credential-load__empty">{{ t('credentialLoad.empty') }}</p>
-        </section>
-
-        <div class="modern-credential-load__connector" aria-hidden="true">
-          <span class="modern-credential-load__connector-arrow">↓</span>
-          <span class="modern-credential-load__connector-label">{{ t('credentialLoad.dispatchHint') }}</span>
-        </div>
-
         <!-- 凭证层: 调度终点, 实时并发 + 窗口统计 + 压力 -->
         <section class="modern-credential-load__tier">
           <div class="modern-credential-load__tier-head">
@@ -470,6 +370,115 @@ function quotaTone(ratio: number): 'ok' | 'warn' | 'high' {
           </div>
           <p v-else class="modern-credential-load__empty">{{ t('credentialLoad.empty') }}</p>
         </section>
+
+        <!-- 用户密钥层: 流量入口 -->
+        <section class="modern-credential-load__tier">
+          <div class="modern-credential-load__tier-head">
+            <span class="modern-credential-load__tier-badge">{{ t('credentialLoad.tierAccessKeys') }}</span>
+            <span class="modern-credential-load__tier-agg">
+              {{ accessRows.length }} · {{ t('credentialLoad.columns.requests') }} {{ formatTokens(totals?.requests ?? 0) }}
+            </span>
+          </div>
+          <div
+            v-if="accessRows.length > 0"
+            class="modern-credential-load__table modern-credential-load__table--access"
+            role="table"
+          >
+            <div class="modern-credential-load__row modern-credential-load__row--head" role="row">
+              <span role="columnheader">{{ t('credentialLoad.person') }}</span>
+              <span
+                v-for="column in (['requests','successRate','affinity','tokens','cacheRead'] as const)"
+                :key="column"
+                role="columnheader"
+                class="modern-credential-load__num"
+              >
+                {{ t(`credentialLoad.columns.${column}`) }}
+              </span>
+              <span role="columnheader">{{ t('credentialLoad.columns.status') }}</span>
+            </div>
+            <div v-for="{ item, stats } in accessRows" :key="item.id" class="modern-credential-load__row" role="row">
+              <span role="cell" class="modern-credential-load__name">
+                <AppButton variant="text" @click="openAccessKeyDetail(item.id)">{{ displayName(item) }}</AppButton>
+              </span>
+              <span role="cell" class="modern-credential-load__num modern-credential-load__req">
+                <span class="modern-credential-load__bar" aria-hidden="true">
+                  <span class="modern-credential-load__bar-fill" :style="{ width: `${barPercent(stats.requests, accessMax)}%` }"></span>
+                </span>
+                {{ stats.requests }}
+              </span>
+              <span role="cell" class="modern-credential-load__num">{{ ratio(stats.success, stats.requests) }}</span>
+              <span role="cell" class="modern-credential-load__num">{{ ratio(stats.affinityHits, stats.requests) }}</span>
+              <span role="cell" class="modern-credential-load__num">
+                {{ formatTokens(stats.uncachedInputTokens + stats.outputTokens) }}
+              </span>
+              <span role="cell" class="modern-credential-load__num">{{ formatTokens(stats.cacheReadTokens) }}</span>
+              <span role="cell">
+                <span
+                  class="modern-credential-load__chip"
+                  :class="stats.requests > 0 ? 'modern-credential-load__chip--ok' : 'modern-credential-load__chip--idle'"
+                >
+                  {{ stats.requests > 0 ? t('credentialLoad.keyActive') : t('credentialLoad.keyIdle') }}
+                </span>
+              </span>
+            </div>
+          </div>
+          <p v-else class="modern-credential-load__empty">{{ t('credentialLoad.empty') }}</p>
+        </section>
+
+        <div class="modern-credential-load__connector" aria-hidden="true">
+          <span class="modern-credential-load__connector-arrow">↑</span>
+          <span class="modern-credential-load__connector-label">{{ t('credentialLoad.routeHint') }}</span>
+        </div>
+
+        <!-- 分组层: 路由容器 -->
+        <section class="modern-credential-load__tier">
+          <div class="modern-credential-load__tier-head">
+            <span class="modern-credential-load__tier-badge">{{ t('credentialLoad.tierGroups') }}</span>
+            <span class="modern-credential-load__tier-agg">
+              {{ groupRows.length }} · {{ t('credentialLoad.columns.requests') }} {{ formatTokens(totals?.requests ?? 0) }}
+            </span>
+          </div>
+          <div
+            v-if="groupRows.length > 0"
+            class="modern-credential-load__table modern-credential-load__table--groups"
+            role="table"
+          >
+            <div class="modern-credential-load__row modern-credential-load__row--head" role="row">
+              <span role="columnheader">{{ t('credentialLoad.group') }}</span>
+              <span
+                v-for="column in (['requests','successRate','tokens','cacheRead'] as const)"
+                :key="column"
+                role="columnheader"
+                class="modern-credential-load__num"
+              >
+                {{ t(`credentialLoad.columns.${column}`) }}
+              </span>
+            </div>
+            <div v-for="{ item, stats } in groupRows" :key="item.id" class="modern-credential-load__row" role="row">
+              <span role="cell" class="modern-credential-load__name">
+                <AppButton variant="text" @click="openGroupDetail(item.id)">{{ displayName(item) }}</AppButton>
+              </span>
+              <span role="cell" class="modern-credential-load__num modern-credential-load__req">
+                <span class="modern-credential-load__bar" aria-hidden="true">
+                  <span class="modern-credential-load__bar-fill" :style="{ width: `${barPercent(stats.requests, groupRows[0].stats.requests)}%` }"></span>
+                </span>
+                {{ stats.requests }}
+              </span>
+              <span role="cell" class="modern-credential-load__num">{{ ratio(stats.success, stats.requests) }}</span>
+              <span role="cell" class="modern-credential-load__num">
+                {{ formatTokens(stats.uncachedInputTokens + stats.outputTokens) }}
+              </span>
+              <span role="cell" class="modern-credential-load__num">{{ formatTokens(stats.cacheReadTokens) }}</span>
+            </div>
+          </div>
+          <p v-else class="modern-credential-load__empty">{{ t('credentialLoad.empty') }}</p>
+        </section>
+
+        <div class="modern-credential-load__connector" aria-hidden="true">
+          <span class="modern-credential-load__connector-arrow">↑</span>
+          <span class="modern-credential-load__connector-label">{{ t('credentialLoad.dispatchHint') }}</span>
+        </div>
+
       </div>
 
       <section class="modern-credential-load__errors">

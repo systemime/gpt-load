@@ -78,6 +78,7 @@ type CredentialRegistry struct {
 	scheduling       *SchedulingState
 	slots            *CredentialSlots
 	usageTracker     *CredentialUsageTracker
+	loadHistory      *loadHistory
 	mu               sync.RWMutex
 	buckets          map[uint]map[uint]*CredentialEntry
 	credentialGroups map[uint]uint
@@ -88,6 +89,7 @@ func NewCredentialRegistry() *CredentialRegistry {
 		scheduling:       NewSchedulingState(),
 		slots:            NewCredentialSlots(0),
 		usageTracker:     NewCredentialUsageTracker(),
+		loadHistory:      &loadHistory{},
 		buckets:          make(map[uint]map[uint]*CredentialEntry),
 		credentialGroups: make(map[uint]uint),
 	}

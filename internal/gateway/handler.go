@@ -92,6 +92,7 @@ type runtimeCredentialRegistry interface {
 	IncrFailure(credentialID uint) (int, bool)
 	SetBlacklistedWithChange(credentialID uint) (exists bool, changed bool)
 	ClearFailure(credentialID uint) bool
+	CountSilentTransfer()
 }
 
 type Handler struct {
@@ -1550,6 +1551,11 @@ func (handler *Handler) executeAttempts(
 			refreshRetry = &credentialRefreshRetry{selection: selection, ref: ref}
 		}
 		if decision.Retry != health.RetryNone {
+			// 无感转移计数: 每次换下一个凭证的重试都算一次(含转移后仍失败的),
+			// 负载页折线图按秒差值展示"系统替用户消化了多少次故障"。
+			if decision.Retry == health.RetryNextCandidate {
+				handler.registry.CountSilentTransfer()
+			}
 			iterator.AdvancePriority(selection)
 		}
 		if decision.Effect == health.EffectSkipGroup {

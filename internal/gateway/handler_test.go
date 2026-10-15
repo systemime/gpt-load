@@ -1085,7 +1085,7 @@ func TestHandlerStaggersNextCandidateRetry(t *testing.T) {
 			StatusCode: http.StatusOK, Header: make(http.Header), Body: []byte(`{"ok":true}`), RequestWritten: true,
 		},
 	}}
-	engine, handler, _, _ := newStatsHandlerTestRuntime(t, forwarder, "sk-first", "sk-second")
+	engine, handler, registry, _ := newStatsHandlerTestRuntime(t, forwarder, "sk-first", "sk-second")
 	handler.retryStagger = func() time.Duration { return 40 * time.Millisecond }
 	handler.now = func() time.Time { return now }
 
@@ -1105,6 +1105,9 @@ func TestHandlerStaggersNextCandidateRetry(t *testing.T) {
 	}
 	if elapsed < 40*time.Millisecond {
 		t.Fatalf("elapsed = %v, want >= 40ms stagger before next candidate", elapsed)
+	}
+	if got := registry.SilentTransfers(); got != 1 {
+		t.Fatalf("silent transfers = %d, want 1", got)
 	}
 }
 
@@ -2019,6 +2022,10 @@ func (panicRuntimeRegistry) ActiveEncryptedCredentialDataIfMatch(state.Credentia
 
 func (panicRuntimeRegistry) SetCooldown(uint, time.Time) bool {
 	panic("model endpoint set cooldown")
+}
+
+func (panicRuntimeRegistry) CountSilentTransfer() {
+	panic("model endpoint counted silent transfer")
 }
 
 func (panicRuntimeRegistry) SetCooldownWithChange(uint, time.Time) (bool, bool) {

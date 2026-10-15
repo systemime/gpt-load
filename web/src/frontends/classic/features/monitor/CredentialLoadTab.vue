@@ -13,6 +13,7 @@ import {
 } from '@/app/resources/credential-load'
 import AppTooltip from '@/components/ui/AppTooltip.vue'
 import QueryFeedback from '@/components/ui/QueryFeedback.vue'
+import CredentialLoadChart from './CredentialLoadChart.vue'
 import SegmentedControl, { type SegmentedControlOption } from '@/components/ui/SegmentedControl.vue'
 import SkeletonSurface from '@/components/ui/SkeletonSurface.vue'
 import { formatInteger } from '@/lib/format'
@@ -53,7 +54,7 @@ const totals = computed(() => {
   )
   // 容量只统计可调度凭证; 已停用凭证不再参与准入, 计入会虚增总容量。
   const capacity =
-    data.cap > 0 ? data.cap * data.credentials.filter((item) => item.status === 'active').length : 0
+    data.cap > 0 ? data.cap * data.credentials.filter((item) => item.runtime_state === 'available').length : 0
   return { ...stats, capacity, rejects: data.local_rejects[activeWindow.value] }
 })
 
@@ -121,8 +122,11 @@ function formatTokens(value: number): string {
   return formatInteger(value, locale.value)
 }
 
-function statusTone(status: string): string {
-  return status === 'active' ? 'credential-load__status--active' : 'credential-load__status--muted'
+// 可调度口径: 只有 available 算健康; 冷却/隔离/停用都置灰并直接显示 runtime_state。
+function statusTone(item: CredentialLoadItem): string {
+  return item.runtime_state === 'available'
+    ? 'credential-load__status--active'
+    : 'credential-load__status--muted'
 }
 
 function barPercent(value: number, max: number): number {
@@ -257,116 +261,10 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
         </div>
       </div>
 
+      <!-- 5 分钟实时折线: 并发/排队(左轴) + 无感转移(右轴), 服务端 1s 采样 -->
+      <CredentialLoadChart v-if="report" :samples="report.history" :capacity="totals ? totals.capacity : 0" />
+
       <div class="credential-load__chain">
-        <!-- 用户密钥层: 流量入口 -->
-        <section class="credential-load__tier">
-          <div class="credential-load__tier-head">
-            <span class="credential-load__tier-badge">{{ t('monitor.credentials.tierAccessKeys') }}</span>
-            <span class="credential-load__tier-agg">
-              {{ formatInteger(accessRows.length, locale) }} ·
-              {{ t('monitor.credentials.columns.requests') }} {{ formatTokens(totals?.requests ?? 0) }}
-            </span>
-          </div>
-          <div
-            v-if="accessRows.length > 0"
-            class="credential-load__table credential-load__table--access"
-            role="table"
-          >
-            <div class="credential-load__row credential-load__row--head" role="row">
-              <span role="columnheader">{{ t('monitor.credentials.columns.person') }}</span>
-              <span
-                v-for="column in ['requests', 'successRate', 'affinity', 'tokens', 'cacheRead']"
-                :key="column"
-                role="columnheader"
-                class="credential-load__number"
-              >
-                {{ t(`monitor.credentials.columns.${column}`) }}
-              </span>
-              <span role="columnheader">{{ t('monitor.credentials.columns.status') }}</span>
-            </div>
-            <div v-for="{ item, stats } in accessRows" :key="item.id" class="credential-load__row" role="row">
-              <span role="cell" class="credential-load__name">{{ displayName(item) }}</span>
-              <span role="cell" class="credential-load__number credential-load__req">
-                <span class="credential-load__bar" aria-hidden="true">
-                  <span class="credential-load__bar-fill" :style="{ width: `${barPercent(stats.requests, accessMax)}%` }"></span>
-                </span>
-                {{ formatInteger(stats.requests, locale) }}
-              </span>
-              <span role="cell" class="credential-load__number">{{ ratio(stats.success, stats.requests) }}</span>
-              <span role="cell" class="credential-load__number">{{ ratio(stats.affinity_hits, stats.requests) }}</span>
-              <span role="cell" class="credential-load__number">
-                {{ formatTokens(stats.uncached_input_tokens + stats.output_tokens) }}
-              </span>
-              <span role="cell" class="credential-load__number">{{ formatTokens(stats.cache_read_tokens) }}</span>
-              <span role="cell">
-                <span
-                  class="credential-load__chip"
-                  :class="stats.requests > 0 ? 'credential-load__chip--ok' : 'credential-load__chip--idle'"
-                >
-                  {{ stats.requests > 0 ? t('monitor.credentials.keyActive') : t('monitor.credentials.keyIdle') }}
-                </span>
-              </span>
-            </div>
-          </div>
-          <p v-else class="credential-load__empty">{{ t('monitor.credentials.empty') }}</p>
-        </section>
-
-        <div class="credential-load__connector" aria-hidden="true">
-          <span class="credential-load__connector-arrow">↓</span>
-          <span class="credential-load__connector-label">{{ t('monitor.credentials.routeHint') }}</span>
-        </div>
-
-        <!-- 分组层: 路由容器 -->
-        <section class="credential-load__tier">
-          <div class="credential-load__tier-head">
-            <span class="credential-load__tier-badge">{{ t('monitor.credentials.tierGroups') }}</span>
-            <span class="credential-load__tier-agg">
-              {{ formatInteger(groupRows.length, locale) }} ·
-              {{ t('monitor.credentials.columns.requests') }} {{ formatTokens(totals?.requests ?? 0) }}
-            </span>
-          </div>
-          <div
-            v-if="groupRows.length > 0"
-            class="credential-load__table credential-load__table--groups"
-            role="table"
-          >
-            <div class="credential-load__row credential-load__row--head" role="row">
-              <span role="columnheader">{{ t('monitor.credentials.columns.group') }}</span>
-              <span
-                v-for="column in ['requests', 'successRate', 'tokens', 'cacheRead']"
-                :key="column"
-                role="columnheader"
-                class="credential-load__number"
-              >
-                {{ t(`monitor.credentials.columns.${column}`) }}
-              </span>
-            </div>
-            <div v-for="{ item, stats } in groupRows" :key="item.id" class="credential-load__row" role="row">
-              <span role="cell" class="credential-load__name">{{ displayName(item) }}</span>
-              <span role="cell" class="credential-load__number credential-load__req">
-                <span class="credential-load__bar" aria-hidden="true">
-                  <span
-                    class="credential-load__bar-fill"
-                    :style="{ width: `${barPercent(stats.requests, groupRows[0].stats.requests)}%` }"
-                  ></span>
-                </span>
-                {{ formatInteger(stats.requests, locale) }}
-              </span>
-              <span role="cell" class="credential-load__number">{{ ratio(stats.success, stats.requests) }}</span>
-              <span role="cell" class="credential-load__number">
-                {{ formatTokens(stats.uncached_input_tokens + stats.output_tokens) }}
-              </span>
-              <span role="cell" class="credential-load__number">{{ formatTokens(stats.cache_read_tokens) }}</span>
-            </div>
-          </div>
-          <p v-else class="credential-load__empty">{{ t('monitor.credentials.empty') }}</p>
-        </section>
-
-        <div class="credential-load__connector" aria-hidden="true">
-          <span class="credential-load__connector-arrow">↓</span>
-          <span class="credential-load__connector-label">{{ t('monitor.credentials.dispatchHint') }}</span>
-        </div>
-
         <!-- 凭证层: 调度终点, 实时并发 + 窗口统计 + 压力 -->
         <section class="credential-load__tier">
           <div class="credential-load__tier-head">
@@ -406,7 +304,7 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
             </div>
             <div v-for="{ item, stats } in rows" :key="item.id" class="credential-load__row" role="row">
               <span role="cell" class="credential-load__name">{{ displayName(item) }}</span>
-              <span role="cell" :class="statusTone(item.status)">{{ item.status }}</span>
+              <span role="cell" :class="statusTone(item)">{{ item.runtime_state === 'available' ? item.status : item.runtime_state }}</span>
               <span role="cell" class="credential-load__number credential-load__req">
                 <span class="credential-load__bar" aria-hidden="true">
                   <span
@@ -477,6 +375,116 @@ const errorColumns: Array<{ key: keyof CredentialLoadItem['errors_5h']; label: s
           </div>
           <p v-else class="credential-load__empty">{{ t('monitor.credentials.empty') }}</p>
         </section>
+
+        <!-- 用户密钥层: 流量入口 -->
+        <section class="credential-load__tier">
+          <div class="credential-load__tier-head">
+            <span class="credential-load__tier-badge">{{ t('monitor.credentials.tierAccessKeys') }}</span>
+            <span class="credential-load__tier-agg">
+              {{ formatInteger(accessRows.length, locale) }} ·
+              {{ t('monitor.credentials.columns.requests') }} {{ formatTokens(totals?.requests ?? 0) }}
+            </span>
+          </div>
+          <div
+            v-if="accessRows.length > 0"
+            class="credential-load__table credential-load__table--access"
+            role="table"
+          >
+            <div class="credential-load__row credential-load__row--head" role="row">
+              <span role="columnheader">{{ t('monitor.credentials.columns.person') }}</span>
+              <span
+                v-for="column in ['requests', 'successRate', 'affinity', 'tokens', 'cacheRead']"
+                :key="column"
+                role="columnheader"
+                class="credential-load__number"
+              >
+                {{ t(`monitor.credentials.columns.${column}`) }}
+              </span>
+              <span role="columnheader">{{ t('monitor.credentials.columns.status') }}</span>
+            </div>
+            <div v-for="{ item, stats } in accessRows" :key="item.id" class="credential-load__row" role="row">
+              <span role="cell" class="credential-load__name">{{ displayName(item) }}</span>
+              <span role="cell" class="credential-load__number credential-load__req">
+                <span class="credential-load__bar" aria-hidden="true">
+                  <span class="credential-load__bar-fill" :style="{ width: `${barPercent(stats.requests, accessMax)}%` }"></span>
+                </span>
+                {{ formatInteger(stats.requests, locale) }}
+              </span>
+              <span role="cell" class="credential-load__number">{{ ratio(stats.success, stats.requests) }}</span>
+              <span role="cell" class="credential-load__number">{{ ratio(stats.affinity_hits, stats.requests) }}</span>
+              <span role="cell" class="credential-load__number">
+                {{ formatTokens(stats.uncached_input_tokens + stats.output_tokens) }}
+              </span>
+              <span role="cell" class="credential-load__number">{{ formatTokens(stats.cache_read_tokens) }}</span>
+              <span role="cell">
+                <span
+                  class="credential-load__chip"
+                  :class="stats.requests > 0 ? 'credential-load__chip--ok' : 'credential-load__chip--idle'"
+                >
+                  {{ stats.requests > 0 ? t('monitor.credentials.keyActive') : t('monitor.credentials.keyIdle') }}
+                </span>
+              </span>
+            </div>
+          </div>
+          <p v-else class="credential-load__empty">{{ t('monitor.credentials.empty') }}</p>
+        </section>
+
+        <div class="credential-load__connector" aria-hidden="true">
+          <span class="credential-load__connector-arrow">↑</span>
+          <span class="credential-load__connector-label">{{ t('monitor.credentials.routeHint') }}</span>
+        </div>
+
+        <!-- 分组层: 路由容器 -->
+        <section class="credential-load__tier">
+          <div class="credential-load__tier-head">
+            <span class="credential-load__tier-badge">{{ t('monitor.credentials.tierGroups') }}</span>
+            <span class="credential-load__tier-agg">
+              {{ formatInteger(groupRows.length, locale) }} ·
+              {{ t('monitor.credentials.columns.requests') }} {{ formatTokens(totals?.requests ?? 0) }}
+            </span>
+          </div>
+          <div
+            v-if="groupRows.length > 0"
+            class="credential-load__table credential-load__table--groups"
+            role="table"
+          >
+            <div class="credential-load__row credential-load__row--head" role="row">
+              <span role="columnheader">{{ t('monitor.credentials.columns.group') }}</span>
+              <span
+                v-for="column in ['requests', 'successRate', 'tokens', 'cacheRead']"
+                :key="column"
+                role="columnheader"
+                class="credential-load__number"
+              >
+                {{ t(`monitor.credentials.columns.${column}`) }}
+              </span>
+            </div>
+            <div v-for="{ item, stats } in groupRows" :key="item.id" class="credential-load__row" role="row">
+              <span role="cell" class="credential-load__name">{{ displayName(item) }}</span>
+              <span role="cell" class="credential-load__number credential-load__req">
+                <span class="credential-load__bar" aria-hidden="true">
+                  <span
+                    class="credential-load__bar-fill"
+                    :style="{ width: `${barPercent(stats.requests, groupRows[0].stats.requests)}%` }"
+                  ></span>
+                </span>
+                {{ formatInteger(stats.requests, locale) }}
+              </span>
+              <span role="cell" class="credential-load__number">{{ ratio(stats.success, stats.requests) }}</span>
+              <span role="cell" class="credential-load__number">
+                {{ formatTokens(stats.uncached_input_tokens + stats.output_tokens) }}
+              </span>
+              <span role="cell" class="credential-load__number">{{ formatTokens(stats.cache_read_tokens) }}</span>
+            </div>
+          </div>
+          <p v-else class="credential-load__empty">{{ t('monitor.credentials.empty') }}</p>
+        </section>
+
+        <div class="credential-load__connector" aria-hidden="true">
+          <span class="credential-load__connector-arrow">↑</span>
+          <span class="credential-load__connector-label">{{ t('monitor.credentials.dispatchHint') }}</span>
+        </div>
+
       </div>
 
       <section class="credential-load__errors" :aria-label="t('monitor.credentials.errorsTitle')">

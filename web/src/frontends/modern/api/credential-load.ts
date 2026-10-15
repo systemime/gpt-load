@@ -61,6 +61,13 @@ export interface CredentialLoadDimension {
   windows: Record<CredentialLoadWindowKey, CredentialLoadWindow>
 }
 
+export interface CredentialLoadHistoryPoint {
+  atMs: number
+  inflight: number
+  queued: number
+  silentTransfers: number
+}
+
 export interface CredentialLoadReport {
   observedAt: number
   cap: number
@@ -69,6 +76,8 @@ export interface CredentialLoadReport {
   localRejects: Record<CredentialLoadWindowKey, number>
   accessKeys: CredentialLoadDimension[]
   groups: CredentialLoadDimension[]
+  // history 是服务端 1s 采样的 5 分钟滚动窗, 图表数据不依赖页面轮询。
+  history: CredentialLoadHistoryPoint[]
 }
 
 function readDecimal(value: unknown): number {
@@ -171,6 +180,15 @@ export function readCredentialLoad(value: unknown): CredentialLoadReport {
       teamCredits7d: readDecimal(planRow.team_credits_7d),
     },
     credentials: list(row.credentials).map(readItem),
+    history: list(row.history ?? []).map((value) => {
+      const point = record(value)
+      return {
+        atMs: integer(point.at_ms),
+        inflight: integer(point.inflight),
+        queued: integer(point.queued),
+        silentTransfers: integer(point.silent_transfers),
+      }
+    }),
     localRejects: Object.fromEntries(
       credentialLoadWindowKeys.map((key) => [key, integer(rejects[key])]),
     ) as Record<CredentialLoadWindowKey, number>,

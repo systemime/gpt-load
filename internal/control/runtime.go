@@ -20,6 +20,7 @@ const (
 	maxValidationJitter       = 3 * time.Minute
 	retentionInterval         = time.Hour
 	credentialUsageInterval   = time.Minute
+	loadHistoryInterval       = time.Second
 )
 
 type credentialMutationCoordinator interface {
@@ -179,7 +180,42 @@ func (runtime *Runtime) Run(ctx context.Context) {
 			runtime.runCredentialUsage(ctx, usageTicker)
 		}()
 	}
+	if runtime.registry != nil {
+		loadHistoryTicker := runtime.newTicker(loadHistoryInterval)
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			runtime.runLoadHistory(ctx, loadHistoryTicker)
+		}()
+	}
 	wait.Wait()
+}
+
+// runLoadHistory 每秒采样总在途/排队写入注册表环形缓冲, 供负载页折线图。
+// 静默转移计数由网关递增, 这里只读快照, 采样开销为原子读+小循环。
+func (runtime *Runtime) runLoadHistory(ctx context.Context, ticker runtimeTicker) {
+	defer func() { ticker.Stop() }()
+	record := func() {
+		slots := runtime.registry.Slots()
+		var inflight, queued int64
+		for _, view := range runtime.registry.Snapshot() {
+			inflight += slots.Inflight(view.ID)
+			queued += slots.Waiting(view.ID)
+		}
+		runtime.registry.RecordLoadSample(runtime.now().UnixMilli(), inflight, queued)
+	}
+	record()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C():
+			if ctx.Err() != nil {
+				return
+			}
+			record()
+		}
+	}
 }
 
 // runCredentialUsage 周期聚合滚动窗口用量并刷新注册表 tracker。

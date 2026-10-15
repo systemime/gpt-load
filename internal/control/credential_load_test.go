@@ -113,6 +113,10 @@ func TestCredentialLoadEndpointAggregatesWindowsErrorsAndInflight(t *testing.T) 
 	if result.LocalRejects["1h"] != 1 {
 		t.Fatalf("local rejects 1h = %d, want 1", result.LocalRejects["1h"])
 	}
+	// 折线图数据: 端点必须带 history 数组(采样器未运行时允许为空切片)。
+	if result.History == nil {
+		t.Fatalf("history = nil, want non-nil array")
+	}
 	byID := make(map[uint]credentialLoadItem, len(result.Credentials))
 	for _, item := range result.Credentials {
 		byID[item.ID] = item

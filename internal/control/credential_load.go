@@ -86,6 +86,8 @@ type credentialLoadResponse struct {
 	AccessKeys   []credentialLoadAccessKeyItem `json:"access_keys"`
 	Groups       []credentialLoadGroupItem     `json:"groups"`
 	LocalRejects map[string]int64              `json:"local_rejects"`
+	// History 是负载页折线图数据: 1s 采样 × 5 分钟环形窗(控制面后台采集)。
+	History []state.LoadHistorySample `json:"history"`
 }
 
 var credentialLoadErrorCategories = map[string]string{
@@ -191,6 +193,7 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 		AccessKeys:   credentialLoadAccessKeyItems(accessKeyNames, accessKeyWindows),
 		Groups:       credentialLoadGroupItems(groupNames, groupWindows),
 		LocalRejects: localRejects,
+		History:      service.registry.LoadHistorySnapshot(),
 	}
 	for _, view := range views {
 		usage := usageSnapshot[view.ID]

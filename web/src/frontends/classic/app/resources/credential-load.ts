@@ -39,6 +39,9 @@ export interface CredentialLoadItem {
   id: number
   name: string
   status: string
+  // runtime_state 才是可调度口径(available/cooldown/blacklisted/disabled),
+  // 与调度器一致; status 只是配置面开关。
+  runtime_state: string
   inflight: number
   queued: number
   usage: CredentialLoadUsage
@@ -63,6 +66,13 @@ export interface CredentialLoadDimension {
   windows: Record<CredentialLoadWindowKey, CredentialLoadWindow>
 }
 
+export interface CredentialLoadHistoryPoint {
+  at_ms: number
+  inflight: number
+  queued: number
+  silent_transfers: number
+}
+
 export interface CredentialLoadReport {
   observed_at_ms: number
   cap: number
@@ -71,6 +81,8 @@ export interface CredentialLoadReport {
   local_rejects: Record<CredentialLoadWindowKey, number>
   access_keys: CredentialLoadDimension[]
   groups: CredentialLoadDimension[]
+  // 服务端 1s 采样 × 5 分钟滚动窗, 折线图数据不依赖页面轮询。
+  history: CredentialLoadHistoryPoint[]
 }
 
 const windowFields = [
@@ -92,7 +104,7 @@ const errorFields = [
 ] as const
 const itemFields = ['id', 'name', 'status', 'inflight', 'queued', 'usage', 'pressure', 'credits_5h', 'credits_7d', 'windows', 'errors_5h'] as const
 const planFields = ['plan', 'quota_credits_5h', 'quota_credits_7d', 'team_credits_5h', 'team_credits_7d'] as const
-const reportFields = ['observed_at_ms', 'cap', 'plan', 'quota_credits_5h', 'quota_credits_7d', 'team_credits_5h', 'team_credits_7d', 'credentials', 'local_rejects', 'access_keys', 'groups'] as const
+const reportFields = ['observed_at_ms', 'cap', 'plan', 'quota_credits_5h', 'quota_credits_7d', 'team_credits_5h', 'team_credits_7d', 'credentials', 'local_rejects', 'access_keys', 'groups', 'history'] as const
 
 function invalidResponse(): never {
   throw new InvalidResponseError()
@@ -142,6 +154,7 @@ function projectItem(value: unknown): CredentialLoadItem {
     id: projectSafeInteger(record.id, { minimum: 1 }),
     name: projectString(record.name, { allowEmpty: true }),
     status: projectString(record.status),
+    runtime_state: projectString(record.runtime_state, { allowEmpty: true }) || 'active',
     inflight: projectCount(record.inflight),
     queued: projectCount(record.queued),
     usage: ((): CredentialLoadUsage => {
@@ -202,6 +215,15 @@ export function projectCredentialLoad(value: unknown): CredentialLoadReport {
   }
   const accessKeys = projectArray(record.access_keys, readDimension)
   const groups = projectArray(record.groups, readDimension)
+  const history = projectArray(record.history ?? [], (value) => {
+    const row = projectRecord(value)
+    return {
+      at_ms: projectSafeInteger(row.at_ms, { minimum: 0 }),
+      inflight: projectSafeInteger(row.inflight, { minimum: 0 }),
+      queued: projectSafeInteger(row.queued, { minimum: 0 }),
+      silent_transfers: projectSafeInteger(row.silent_transfers, { minimum: 0 }),
+    }
+  })
   return {
     observed_at_ms: projectSafeInteger(record.observed_at_ms, { minimum: 0 }),
     cap: projectSafeInteger(record.cap, { minimum: 0 }),
@@ -210,6 +232,7 @@ export function projectCredentialLoad(value: unknown): CredentialLoadReport {
     local_rejects: mapped,
     access_keys: accessKeys,
     groups: groups,
+    history,
   }
 }
 
