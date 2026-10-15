@@ -16,21 +16,17 @@ type CredentialRuntimeCheckpoint struct {
 	FailureCount       int                  `json:"failure_count"`
 	IdentityGeneration uint64               `json:"identity_generation,omitempty"`
 	ModelCooldowns     map[string]time.Time `json:"model_cooldowns,omitempty"`
-	// WindowAnchorMS/WindowActivityMS 是厂商 5h 额度窗口锚点(0=未激活)。
-	WindowAnchorMS   int64 `json:"window_anchor_ms,omitempty"`
-	WindowActivityMS int64 `json:"window_activity_ms,omitempty"`
 }
 
 // CaptureRuntimeCheckpoint returns detached runtime health state in stable
 // order. It intentionally excludes credentials and failure generations.
 func (r *CredentialRegistry) CaptureRuntimeCheckpoint() []CredentialRuntimeCheckpoint {
 	r.ExpireModelCooldowns(time.Now())
-	windowAnchors := r.CaptureWindowAnchors()
 	r.mu.RLock()
 	checkpoints := make([]CredentialRuntimeCheckpoint, 0, len(r.credentialGroups))
 	for _, bucket := range r.buckets {
 		for _, entry := range bucket {
-			checkpoint := CredentialRuntimeCheckpoint{
+			checkpoints = append(checkpoints, CredentialRuntimeCheckpoint{
 				ID:                 entry.ID,
 				GroupID:            entry.GroupID,
 				CooldownUntil:      entry.CooldownUntil,
@@ -38,12 +34,7 @@ func (r *CredentialRegistry) CaptureRuntimeCheckpoint() []CredentialRuntimeCheck
 				FailureCount:       entry.FailureCount,
 				IdentityGeneration: entry.IdentityGeneration,
 				ModelCooldowns:     cloneModelCooldowns(entry.ModelCooldowns),
-			}
-			if pair, ok := windowAnchors[entry.ID]; ok {
-				checkpoint.WindowAnchorMS = pair[0]
-				checkpoint.WindowActivityMS = pair[1]
-			}
-			checkpoints = append(checkpoints, checkpoint)
+			})
 		}
 	}
 	r.mu.RUnlock()
@@ -79,11 +70,6 @@ func (r *CredentialRegistry) RestoreRuntimeCheckpoint(checkpoints []CredentialRu
 		entry.CooldownUntil = checkpoint.CooldownUntil
 		entry.Blacklisted = checkpoint.Blacklisted
 		entry.FailureCount = checkpoint.FailureCount
-		if checkpoint.WindowAnchorMS != 0 || checkpoint.WindowActivityMS != 0 {
-			r.RestoreWindowAnchors(map[uint][2]int64{
-				checkpoint.ID: {checkpoint.WindowAnchorMS, checkpoint.WindowActivityMS},
-			})
-		}
 		if checkpoint.IdentityGeneration == entry.IdentityGeneration {
 			entry.ModelCooldowns = cloneModelCooldowns(checkpoint.ModelCooldowns)
 			pruneModelCooldowns(entry.ModelCooldowns, time.Now())

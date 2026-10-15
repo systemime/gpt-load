@@ -93,7 +93,6 @@ type runtimeCredentialRegistry interface {
 	SetBlacklistedWithChange(credentialID uint) (exists bool, changed bool)
 	ClearFailure(credentialID uint) bool
 	CountSilentTransfer()
-	BeginWindowIfNone(credentialID uint, atMS int64) bool
 }
 
 type Handler struct {
@@ -1231,9 +1230,6 @@ func (handler *Handler) executeAttempts(
 			}
 		})
 		defer releaseAttempt()
-		// 厂商 5h 窗口锚点: 锚点为空(每日 07:00 空闲检查清除/首次启用)时,
-		// 以本凭证收到的第一个请求时刻开窗, 已用 token 从零计。
-		handler.registry.BeginWindowIfNone(selection.CredentialID, handler.now().UnixMilli())
 		encrypted, active := handler.registry.ActiveEncryptedCredentialDataIfMatch(ref)
 		if !active {
 			continue

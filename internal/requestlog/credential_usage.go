@@ -2,31 +2,26 @@ package requestlog
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"gpt-load/internal/state"
 )
 
-// CredentialWindowUsage 聚合每个凭证在 5h 与周窗口内的
+// CredentialWindowUsage 聚合每个凭证在滚动 5h 与周窗口内的
 // 请求数与消耗 token(未缓存输入+输出), 供用量均衡(阶段 3)与负载端点使用。
-// 5h 窗口按厂商锚点对齐: windowAnchors 由注册表维护(每日 07:00 空闲检查重置,
-// 凭证收到首个请求时开窗), 窗口起点 = 锚点 + 5h*n; 无锚点退回滚动 now-5h。
 // 口径与 /api/credentials/load 一致: 全部 request_logs 行(含失败),
 // 失败请求 token 为零但计一次到达。
 // 周窗口锚点取优先级: 凭证级 week_reset_anchor_ms > 全局 weekAnchorMS;
 // 锚点 ≤ 0 时退化为滚动 7 天。凭证可因席位单独下单/换绑而拥有独立官方周期。
-func (service *Service) CredentialWindowUsage(
-	ctx context.Context, weekAnchorMS int64, windowAnchors map[uint]int64,
-) (map[uint]state.CredentialUsage, error) {
+func (service *Service) CredentialWindowUsage(ctx context.Context, weekAnchorMS int64) (map[uint]state.CredentialUsage, error) {
 	fiveHoursMS := service.now().Add(-5 * time.Hour).UnixMilli()
 	nowMS := service.now().UnixMilli()
 	defaultWeekStart := weekStartFor(nowMS, weekAnchorMS)
 
 	// 凭证级锚点覆盖: 每个不同窗口单独聚合(组数 = 不同锚点数, 通常 0~2)。
 	anchorRows := make([]struct {
-		ID     uint  `gorm:"column:id"`
-		Anchor int64 `gorm:"column:week_reset_anchor_ms"`
+		ID     uint   `gorm:"column:id"`
+		Anchor int64  `gorm:"column:week_reset_anchor_ms"`
 	}, 0, 8)
 	if err := service.db.WithContext(ctx).
 		Table("credentials").
@@ -52,23 +47,22 @@ func (service *Service) CredentialWindowUsage(
 	idRows := make([]struct {
 		ID uint
 	}, 0, 32)
-	query := service.db.WithContext(ctx).Table("credentials").Select("id")
-	// overridden 为空时 NOT IN () 会退化成 NOT IN (NULL) 而漏掉全部凭证。
-	if len(overridden) > 0 {
-		query = query.Where("id NOT IN ?", overridden)
-	}
-	if err := query.Scan(&idRows).Error; err != nil {
+	if err := service.db.WithContext(ctx).
+		Table("credentials").
+		Select("id").
+		Where("id NOT IN ?", overridden).
+		Scan(&idRows).Error; err != nil {
 		return nil, err
 	}
 	for _, row := range idRows {
 		defaultIDs = append(defaultIDs, row.ID)
 	}
-	if err := service.appendWindowUsage(ctx, usage, defaultIDs, fiveHoursMS, defaultWeekStart, windowAnchors); err != nil {
+	if err := service.appendWindowUsage(ctx, usage, defaultIDs, fiveHoursMS, defaultWeekStart); err != nil {
 		return nil, err
 	}
 	// 各覆盖窗口。
 	for start, ids := range overrideStarts {
-		if err := service.appendWindowUsage(ctx, usage, ids, fiveHoursMS, start, windowAnchors); err != nil {
+		if err := service.appendWindowUsage(ctx, usage, ids, fiveHoursMS, start); err != nil {
 			return nil, err
 		}
 	}
@@ -76,63 +70,38 @@ func (service *Service) CredentialWindowUsage(
 }
 
 // appendWindowUsage 聚合指定凭证集合的 5h 与周窗口请求数/token/积分, 合并进 usage。
-// windowAnchors: 凭证 → 厂商 5h 窗口锚点(epoch ms); 无锚点凭证退回滚动 now-5h。
 func (service *Service) appendWindowUsage(
 	ctx context.Context,
 	usage map[uint]state.CredentialUsage,
 	credentialIDs []uint,
 	fiveHoursMS int64,
 	weekStartMS int64,
-	windowAnchors map[uint]int64,
 ) error {
 	if len(credentialIDs) == 0 {
 		return nil
 	}
 	rows := make([]struct {
-		CredentialID uint    `gorm:"column:credential_id"`
-		Requests5h   int64   `gorm:"column:requests_5h"`
-		Tokens5h     int64   `gorm:"column:tokens_5h"`
-		Requests7d   int64   `gorm:"column:requests_7d"`
-		Tokens7d     int64   `gorm:"column:tokens_7d"`
+		CredentialID uint   `gorm:"column:credential_id"`
+		Requests5h   int64  `gorm:"column:requests_5h"`
+		Tokens5h     int64  `gorm:"column:tokens_5h"`
+		Requests7d   int64  `gorm:"column:requests_7d"`
+		Tokens7d     int64  `gorm:"column:tokens_7d"`
 		Credits5h    float64 `gorm:"column:credits_5h"`
 		Credits7d    float64 `gorm:"column:credits_7d"`
 	}, 0, 16)
 	// request_logs 与 usage_stats 两表窗口一致, UNION ALL 子查询统一聚合:
 	// credits 仅来自 usage_stats, 请求数/token 来自 request_logs。
-	// 5h 边界按凭证厂商锚点对齐: 窗口起点 = 锚点 + 5h*n(在 Go 侧算好),
-	// 无锚点凭证退回滚动 now-5h。锚点列表很小(凭证数), CASE 展开即可。
-	nowMS := service.now().UnixMilli()
-	const fiveH = 5 * 3600 * 1000
-	caseParts := make([]string, 0, len(credentialIDs))
-	caseArgs := make([]any, 0, len(credentialIDs))
-	for _, id := range credentialIDs {
-		caseParts = append(caseParts, "WHEN ? THEN ?")
-		caseArgs = append(caseArgs, id)
-		if anchor, ok := windowAnchors[id]; ok && anchor > 0 {
-			caseArgs = append(caseArgs, anchor+fiveH*((nowMS-anchor)/fiveH))
-		} else {
-			caseArgs = append(caseArgs, nowMS-fiveHoursMS)
-		}
-	}
-	winStartExpr := "COALESCE(CASE w.credential_id " + strings.Join(caseParts, " ") + " END, ?)"
-	rollingFallback := nowMS - fiveHoursMS
-	exprArgs := append(append([]any{}, caseArgs...), rollingFallback)
-	selectArgs := make([]any, 0, len(exprArgs)*3+3)
-	for i := 0; i < 3; i++ {
-		selectArgs = append(selectArgs, exprArgs...)
-	}
-	selectArgs = append(selectArgs, weekStartMS, weekStartMS, weekStartMS)
 	subquery := "(SELECT credential_id, completed_at_ms, uncached_input_tokens, output_tokens, 0 AS cache_read_tokens, '' AS model, 1 AS source FROM request_logs UNION ALL SELECT credential_id, bucket_start_ms AS completed_at_ms, uncached_input_tokens, output_tokens, cache_read_tokens, model, 2 AS source FROM usage_stats) AS w"
 	if err := service.db.WithContext(ctx).
 		Table(subquery).
 		Select(`credential_id,
-SUM(CASE WHEN source = 1 AND completed_at_ms > `+winStartExpr+` THEN 1 ELSE 0 END) AS requests_5h,
-SUM(CASE WHEN source = 1 AND completed_at_ms > `+winStartExpr+` THEN uncached_input_tokens + output_tokens ELSE 0 END) AS tokens_5h,
-SUM(CASE WHEN source = 2 AND completed_at_ms > `+winStartExpr+` THEN `+glmCreditCoefficientSQL+` ELSE 0 END) AS credits_5h,
+SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN 1 ELSE 0 END) AS requests_5h,
+SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN uncached_input_tokens + output_tokens ELSE 0 END) AS tokens_5h,
 SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN 1 ELSE 0 END) AS requests_7d,
 SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN uncached_input_tokens + output_tokens ELSE 0 END) AS tokens_7d,
-SUM(CASE WHEN source = 2 AND completed_at_ms > ? THEN `+glmCreditCoefficientSQL+` ELSE 0 END) AS credits_7d`,
-			selectArgs...).
+SUM(CASE WHEN source = 2 AND completed_at_ms > ? THEN `+glmCreditCoefficientSQL+` ELSE 0 END) AS credits_5h,
+SUM(CASE WHEN source = 2 THEN `+glmCreditCoefficientSQL+` ELSE 0 END) AS credits_7d`,
+			fiveHoursMS, fiveHoursMS, weekStartMS, weekStartMS, fiveHoursMS).
 		Where("credential_id IN ? AND completed_at_ms > ?", credentialIDs, weekStartMS).
 		Group("credential_id").
 		Scan(&rows).Error; err != nil {
