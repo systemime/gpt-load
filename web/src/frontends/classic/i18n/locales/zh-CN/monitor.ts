@@ -38,7 +38,6 @@ export default {
       chartRightAxis: '次/秒',
       chartCapacityLine: '总容量',
       chartEmpty: '暂无采样数据。',
-      chartHover: '悬停查看数值',
       statRequests: '窗口请求',
       statSuccessRate: '成功率',
       statTokens: '窗口消耗',

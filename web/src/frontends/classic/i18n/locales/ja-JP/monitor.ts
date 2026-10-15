@@ -38,7 +38,6 @@ export default {
       chartRightAxis: '回/秒',
       chartCapacityLine: '総容量',
       chartEmpty: 'サンプルはまだありません。',
-      chartHover: 'ホバーで数値を表示',
       statRequests: 'ウィンドウリクエスト',
       statSuccessRate: '成功率',
       statTokens: 'ウィンドウ消費',

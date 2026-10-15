@@ -38,7 +38,6 @@ export default {
       chartRightAxis: 'events/s',
       chartCapacityLine: 'Total capacity',
       chartEmpty: 'No samples yet.',
-      chartHover: 'Hover for values',
       statRequests: 'Window requests',
       statSuccessRate: 'Success rate',
       statTokens: 'Window tokens',

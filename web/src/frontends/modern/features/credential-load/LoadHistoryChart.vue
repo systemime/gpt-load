@@ -2,11 +2,12 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { CredentialLoadHistoryPoint } from '@modern/api/credential-load'
-import { AppSvg, AppTooltip } from '@modern/components/ui'
+import { AppSvg } from '@modern/components/ui'
 import { dateFormatter } from '@modern/components/ui/intl-formatters'
 
 // 负载页折线图: 5 分钟滚动窗, 三条线 = 实时并发/排队(左轴) + 无感转移(右轴)。
 // 左轴上沿取「容量参考线」与实际峰值的较大者, 保证并发线永远有容量对照。
+// 轴刻度取 1/2/2.5/5×10^k 的整数步长, 避免 0/12/25/37/49 这类碎数。
 const props = defineProps<{
   samples: CredentialLoadHistoryPoint[]
   capacity: number
@@ -18,24 +19,37 @@ const width = 720
 const height = 220
 const padLeft = 44
 const padRight = 44
-const padTop = 12
+const padTop = 14
 const padBottom = 26
+
+// 把峰值向上取整到 bands 段的整齐刻度上限。
+function niceMax(peak: number, bands = 4): number {
+  const raw = Math.max(8, peak * 1.08)
+  const exp = 10 ** Math.floor(Math.log10(raw / bands))
+  for (const m of [1, 2, 2.5, 5, 10]) {
+    const step = m * exp
+    if (step * bands >= raw) return step * bands
+  }
+  return Math.ceil(raw)
+}
 
 const leftMax = computed(() => {
   let peak = props.capacity > 0 ? props.capacity : 0
   for (const point of props.samples) {
     peak = Math.max(peak, point.inflight, point.queued)
   }
-  return Math.max(10, Math.ceil(peak * 1.15))
+  return niceMax(peak)
 })
 
-const rightMax = computed(() => {
-  let peak = 1
+const silentPeak = computed(() => {
+  let peak = 0
   for (const point of props.samples) {
     peak = Math.max(peak, point.silentTransfers)
   }
-  return Math.max(4, Math.ceil(peak * 1.15))
+  return peak
 })
+
+const rightMax = computed(() => niceMax(Math.max(silentPeak.value, 1)))
 
 interface ChartPoint { x: number; y: number }
 
@@ -70,21 +84,33 @@ const inflightPath = computed(() => path(points.value.inflight))
 const queuedPath = computed(() => path(points.value.queued))
 const silentPath = computed(() => path(points.value.silent))
 
+const baselineY = computed(() => points.value.yLeft(0))
+
+const inflightArea = computed(() => {
+  const series = points.value.inflight
+  if (series.length < 2) return ''
+  const line = path(series)
+  const last = series[series.length - 1]!
+  const first = series[0]!
+  return `${line} L${last.x.toFixed(1)},${baselineY.value.toFixed(1)} L${first.x.toFixed(1)},${baselineY.value.toFixed(1)} Z`
+})
+
 const capacityY = computed(() => points.value.yLeft(props.capacity))
 
 const leftTicks = computed(() => {
   const ticks: { value: number; y: number }[] = []
   for (let i = 0; i <= 4; i++) {
-    const value = Math.round((leftMax.value * i) / 4)
+    const value = (leftMax.value * i) / 4
     ticks.push({ value, y: points.value.yLeft(value) })
   }
   return ticks
 })
 
 const rightTicks = computed(() => {
+  if (silentPeak.value === 0) return []
   const ticks: { value: number; y: number }[] = []
   for (let i = 0; i <= 4; i++) {
-    const value = Math.round((rightMax.value * i) / 4)
+    const value = (rightMax.value * i) / 4
     ticks.push({ value, y: points.value.yRight(value) })
   }
   return ticks
@@ -110,7 +136,48 @@ const xTicks = computed(() => {
 })
 
 const hover = ref<CredentialLoadHistoryPoint | null>(null)
-const hoverPos = ref({ x: 0, y: 0 })
+
+const hoverX = computed(() => (hover.value ? points.value.x(hover.value.atMs) : 0))
+// 悬浮点在三条线中的最高处, 提示卡片挂在它上方。
+const hoverTopY = computed(() => {
+  const point = hover.value
+  if (!point) return padTop
+  return Math.min(
+    points.value.yLeft(point.inflight),
+    points.value.yLeft(point.queued),
+    points.value.yRight(point.silentTransfers),
+  )
+})
+
+const tooltipStyle = computed(() => {
+  const x = hoverX.value
+  const left = x < width * 0.16
+    ? '2px'
+    : x > width * 0.84
+      ? 'calc(100% - 2px)'
+      : `${(x / width) * 100}%`
+  return {
+    left,
+    top: `calc(${(hoverTopY.value / height) * 100}% - 10px)`,
+  }
+})
+
+const tooltipAlignment = computed(() => {
+  const x = hoverX.value
+  if (x < width * 0.16) return 'start'
+  if (x > width * 0.84) return 'end'
+  return 'center'
+})
+
+const hoverDots = computed(() => {
+  const point = hover.value
+  if (!point) return []
+  return [
+    { cls: 'modern-load-chart__dot--inflight', cx: hoverX.value, cy: points.value.yLeft(point.inflight) },
+    { cls: 'modern-load-chart__dot--queued', cx: hoverX.value, cy: points.value.yLeft(point.queued) },
+    { cls: 'modern-load-chart__dot--silent', cx: hoverX.value, cy: points.value.yRight(point.silentTransfers) },
+  ]
+})
 
 function onMove(event: MouseEvent): void {
   const list = props.samples
@@ -132,18 +199,14 @@ function onMove(event: MouseEvent): void {
     }
   }
   hover.value = nearest
-  hoverPos.value = {
-    x: inner.x(nearest!.atMs),
-    y: inner.yLeft(nearest!.inflight),
-  }
 }
 
-const hoverLabel = computed(() => {
-  const point = hover.value
-  if (!point) return ''
-  const time = dateFormatter(locale.value, { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(point.atMs)
-  return `${time} · ${t('credentialLoad.chartInflight')} ${point.inflight} · ${t('credentialLoad.chartQueued')} ${point.queued} · ${t('credentialLoad.chartSilent')} ${point.silentTransfers}`
+const hoverTime = computed(() => {
+  if (!hover.value) return ''
+  return dateFormatter(locale.value, { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(hover.value.atMs)
 })
+
+const gradientId = `load-history-fade-${Math.random().toString(36).slice(2, 8)}`
 </script>
 
 <template>
@@ -155,12 +218,6 @@ const hoverLabel = computed(() => {
       <span class="modern-load-chart__legend-item"><i class="modern-load-chart__swatch modern-load-chart__swatch--capacity" />{{ t('credentialLoad.chartCapacityLine') }}</span>
     </div>
     <div class="modern-load-chart__plot">
-      <AppTooltip v-if="hover" :label="hoverLabel">
-        <span
-          class="modern-load-chart__cursor"
-          :style="{ left: `${(hoverPos.x / width) * 100}%`, top: `${(hoverPos.y / height) * 100}%` }"
-        />
-      </AppTooltip>
       <AppSvg
         :viewBox="`0 0 ${width} ${height}`"
         class="modern-load-chart__svg"
@@ -169,6 +226,12 @@ const hoverLabel = computed(() => {
         @mousemove="onMove"
         @mouseleave="hover = null"
       >
+        <defs>
+          <linearGradient :id="gradientId" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" class="modern-load-chart__fade" stop-opacity="0.22" />
+            <stop offset="1" class="modern-load-chart__fade" stop-opacity="0.02" />
+          </linearGradient>
+        </defs>
         <g v-for="tick in leftTicks" :key="`l${tick.value}`">
           <line :x1="padLeft" :x2="width - padRight" :y1="tick.y" :y2="tick.y" class="modern-load-chart__grid" />
           <text :x="padLeft - 6" :y="tick.y + 4" class="modern-load-chart__tick modern-load-chart__tick--left">{{ tick.value }}</text>
@@ -181,10 +244,54 @@ const hoverLabel = computed(() => {
           :x1="padLeft" :x2="width - padRight" :y1="capacityY" :y2="capacityY"
           class="modern-load-chart__capacity"
         />
+        <path v-if="inflightArea" :d="inflightArea" :fill="`url(#${gradientId})`" />
         <path v-if="queuedPath" :d="queuedPath" class="modern-load-chart__line modern-load-chart__line--queued" />
         <path v-if="silentPath" :d="silentPath" class="modern-load-chart__line modern-load-chart__line--silent" />
         <path v-if="inflightPath" :d="inflightPath" class="modern-load-chart__line modern-load-chart__line--inflight" />
+        <g v-if="hover">
+          <line
+            :x1="hoverX" :x2="hoverX" :y1="padTop" :y2="baselineY"
+            class="modern-load-chart__guide"
+          />
+          <circle
+            v-for="dot in hoverDots"
+            :key="dot.cls"
+            :cx="dot.cx" :cy="dot.cy" r="3.5"
+            class="modern-load-chart__dot"
+            :class="dot.cls"
+          />
+        </g>
       </AppSvg>
+      <div
+        v-if="hover"
+        class="modern-load-chart__tooltip"
+        :class="`modern-load-chart__tooltip--${tooltipAlignment}`"
+        :style="tooltipStyle"
+        role="tooltip"
+      >
+          <time class="modern-load-chart__tooltip-time">{{ hoverTime }}</time>
+          <span class="modern-load-chart__tooltip-row">
+            <span class="modern-load-chart__tooltip-key">
+              <i class="modern-load-chart__swatch modern-load-chart__swatch--inflight" />
+              {{ t('credentialLoad.chartInflight') }}
+            </span>
+            <strong class="modern-load-chart__tooltip-value">{{ hover.inflight }}</strong>
+          </span>
+          <span class="modern-load-chart__tooltip-row">
+            <span class="modern-load-chart__tooltip-key">
+              <i class="modern-load-chart__swatch modern-load-chart__swatch--queued" />
+              {{ t('credentialLoad.chartQueued') }}
+            </span>
+            <strong class="modern-load-chart__tooltip-value">{{ hover.queued }}</strong>
+          </span>
+          <span class="modern-load-chart__tooltip-row">
+            <span class="modern-load-chart__tooltip-key">
+              <i class="modern-load-chart__swatch modern-load-chart__swatch--silent" />
+              {{ t('credentialLoad.chartSilent') }}
+            </span>
+            <strong class="modern-load-chart__tooltip-value">{{ hover.silentTransfers }}</strong>
+          </span>
+        </div>
     </div>
     <p v-if="samples.length === 0" class="modern-load-chart__empty">{{ t('credentialLoad.chartEmpty') }}</p>
   </section>
@@ -214,7 +321,7 @@ const hoverLabel = computed(() => {
 .modern-load-chart__swatch {
   width: var(--modern-space-2);
   height: var(--modern-space-1);
-  border-radius: var(--modern-radius-full);
+  border-radius: var(--modern-radius-round);
 }
 .modern-load-chart__swatch--inflight {
   background: var(--modern-chart-input);
@@ -237,14 +344,20 @@ const hoverLabel = computed(() => {
   display: block;
   width: 100%;
   height: auto;
+  cursor: crosshair;
+}
+.modern-load-chart__fade {
+  stop-color: var(--modern-chart-input);
 }
 .modern-load-chart__grid {
   stroke: var(--modern-border);
-  stroke-width: 1;
+  stroke-width: var(--modern-line-width);
 }
 .modern-load-chart__tick {
   fill: var(--modern-muted);
-  font-size: 10px;
+  font-size: var(--modern-font-size-caption);
+  font-family: var(--modern-font-mono);
+  font-variant-numeric: tabular-nums;
   text-anchor: middle;
 }
 .modern-load-chart__tick--left {
@@ -256,11 +369,11 @@ const hoverLabel = computed(() => {
 .modern-load-chart__capacity {
   stroke: var(--modern-muted);
   stroke-dasharray: 6 4;
-  stroke-width: 1;
+  stroke-width: var(--modern-line-width);
 }
 .modern-load-chart__line {
   fill: none;
-  stroke-width: 2;
+  stroke-width: var(--modern-trend-stroke);
   stroke-linejoin: round;
   stroke-linecap: round;
 }
@@ -274,14 +387,66 @@ const hoverLabel = computed(() => {
   stroke: var(--modern-danger);
   stroke-dasharray: 4 3;
 }
-.modern-load-chart__cursor {
+.modern-load-chart__guide {
+  stroke: var(--modern-tooltip-border);
+}
+.modern-load-chart__dot {
+  stroke: var(--modern-surface);
+  stroke-width: var(--modern-line-width);
+}
+.modern-load-chart__dot--inflight {
+  fill: var(--modern-chart-input);
+}
+.modern-load-chart__dot--queued {
+  fill: var(--modern-warning);
+}
+.modern-load-chart__dot--silent {
+  fill: var(--modern-danger);
+}
+.modern-load-chart__tooltip {
   position: absolute;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--modern-radius-full);
-  background: var(--modern-chart-input);
-  transform: translate(-50%, -50%);
+  z-index: var(--modern-layer-tooltip, 60);
+  min-width: 150px;
+  display: grid;
+  gap: var(--modern-space-1);
+  transform: translate(-50%, -100%);
+  border: var(--modern-line-width) solid var(--modern-tooltip-border);
+  border-radius: var(--modern-radius-small);
+  background: var(--modern-tooltip-surface);
+  box-shadow: var(--modern-shadow-tooltip);
+  padding: var(--modern-space-2) var(--modern-space-3);
   pointer-events: none;
+  white-space: nowrap;
+}
+.modern-load-chart__tooltip--start {
+  transform: translate(0, -100%);
+}
+.modern-load-chart__tooltip--end {
+  transform: translate(-100%, -100%);
+}
+.modern-load-chart__tooltip-time {
+  color: var(--modern-muted);
+  font-family: var(--modern-font-mono);
+  font-size: var(--modern-font-size-caption);
+}
+.modern-load-chart__tooltip-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--modern-space-4);
+  font-size: var(--modern-font-size-small);
+}
+.modern-load-chart__tooltip-key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--modern-space-1);
+  color: var(--modern-muted);
+}
+.modern-load-chart__tooltip-value {
+  color: var(--modern-text);
+  font-family: var(--modern-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--modern-weight-semibold);
 }
 .modern-load-chart__empty {
   color: var(--modern-muted);
