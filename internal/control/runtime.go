@@ -21,6 +21,7 @@ const (
 	retentionInterval         = time.Hour
 	credentialUsageInterval   = time.Minute
 	loadHistoryInterval       = time.Second
+	windowResetCheckInterval  = 20 * time.Second
 )
 
 type credentialMutationCoordinator interface {
@@ -48,7 +49,7 @@ type credentialStageCleaner interface {
 // credentialUsageReader 由 requestlog.Service 实现: 聚合滚动窗口用量,
 // 供用量均衡(阶段 3)的后台刷新循环写入注册表 tracker。
 type credentialUsageReader interface {
-	CredentialWindowUsage(context.Context, int64) (map[uint]state.CredentialUsage, error)
+	CredentialWindowUsage(context.Context, int64, map[uint]int64) (map[uint]state.CredentialUsage, error)
 }
 
 type runtimeTicker interface {
@@ -187,8 +188,45 @@ func (runtime *Runtime) Run(ctx context.Context) {
 			defer wait.Done()
 			runtime.runLoadHistory(ctx, loadHistoryTicker)
 		}()
+		windowResetTicker := runtime.newTicker(windowResetCheckInterval)
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			runtime.runWindowAnchorReset(ctx, windowResetTicker)
+		}()
 	}
 	wait.Wait()
+}
+
+// runWindowAnchorReset 每天 07:00(Asia/Shanghai) 检查一次: 空闲 ≥5h 的凭证
+// 清空 5h 窗口锚点, 窗口起点等该凭证收到下一个请求时才重新划分。
+// 07:00 只是检查点, 不是窗口起点。
+func (runtime *Runtime) runWindowAnchorReset(ctx context.Context, ticker runtimeTicker) {
+	defer func() { ticker.Stop() }()
+	cst := time.FixedZone("CST", 8*60*60)
+	lastRunDate := ""
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C():
+			if ctx.Err() != nil {
+				return
+			}
+			now := runtime.now().In(cst)
+			dateKey := now.Format("2006-01-02")
+			if now.Hour() != 7 || now.Minute() != 0 || now.Second() > 30 || lastRunDate == dateKey {
+				continue
+			}
+			lastRunDate = dateKey
+			reset := runtime.registry.ResetIdleWindowAnchors(runtime.now().UnixMilli())
+			if len(reset) > 0 {
+				logrus.WithField("event", "window_anchor_reset").
+					WithField("credential_ids", reset).
+					Info("Idle credentials reset for 5h quota window")
+			}
+		}
+	}
 }
 
 // runLoadHistory 每秒采样总在途/排队写入注册表环形缓冲, 供负载页折线图。
@@ -228,7 +266,7 @@ func (runtime *Runtime) runCredentialUsage(ctx context.Context, ticker runtimeTi
 		if snapshot := runtime.manager.Current(); snapshot != nil {
 			weekAnchorMS = snapshot.Settings.GlmWeekResetAnchorMS
 		}
-		usage, err := runtime.usageReader.CredentialWindowUsage(ctx, weekAnchorMS)
+		usage, err := runtime.usageReader.CredentialWindowUsage(ctx, weekAnchorMS, runtime.registry.WindowAnchors())
 		if err != nil {
 			if ctx.Err() == nil {
 				logrus.WithError(err).Warn("Refresh credential window usage failed")

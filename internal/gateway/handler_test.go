@@ -2028,6 +2028,10 @@ func (panicRuntimeRegistry) CountSilentTransfer() {
 	panic("model endpoint counted silent transfer")
 }
 
+func (panicRuntimeRegistry) BeginWindowIfNone(uint, int64) bool {
+	panic("model endpoint opened a quota window")
+}
+
 func (panicRuntimeRegistry) SetCooldownWithChange(uint, time.Time) (bool, bool) {
 	panic("model endpoint set cooldown")
 }

@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	gormsqlite "gorm.io/driver/sqlite"
 	gormmysql "gorm.io/driver/mysql"
 	gormpostgres "gorm.io/driver/postgres"
+	gormsqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
