@@ -6,8 +6,8 @@ import { AppSvg } from '@modern/components/ui'
 import { dateFormatter } from '@modern/components/ui/intl-formatters'
 
 // 负载页折线图: 5 分钟滚动窗, 三条线 = 实时并发/排队(左轴) + 无感转移(右轴)。
-// 左轴上沿取「容量参考线」与实际峰值的较大者, 保证并发线永远有容量对照。
-// 轴刻度取 1/2/2.5/5×10^k 的整数步长, 避免 0/12/25/37/49 这类碎数。
+// 左轴随实际负载峰值自适应(不硬塞容量上限), 容量在量程内时才画参考线,
+// 超出量程则在图例里直接给数值。轴刻度取 1/2/2.5/5×10^k 的整数步长。
 const props = defineProps<{
   samples: CredentialLoadHistoryPoint[]
   capacity: number
@@ -34,12 +34,15 @@ function niceMax(peak: number, bands = 4): number {
 }
 
 const leftMax = computed(() => {
-  let peak = props.capacity > 0 ? props.capacity : 0
+  let peak = 0
   for (const point of props.samples) {
     peak = Math.max(peak, point.inflight, point.queued)
   }
   return niceMax(peak)
 })
+
+// 容量高于量程时参考线会压扁整条并发线, 改为图例展示数值。
+const capacityVisible = computed(() => props.capacity > 0 && props.capacity <= leftMax.value)
 
 const silentPeak = computed(() => {
   let peak = 0
@@ -95,7 +98,7 @@ const inflightArea = computed(() => {
   return `${line} L${last.x.toFixed(1)},${baselineY.value.toFixed(1)} L${first.x.toFixed(1)},${baselineY.value.toFixed(1)} Z`
 })
 
-const capacityY = computed(() => points.value.yLeft(props.capacity))
+const capacityY = computed(() => points.value.yLeft(Math.min(props.capacity, leftMax.value)))
 
 const leftTicks = computed(() => {
   const ticks: { value: number; y: number }[] = []
@@ -215,7 +218,7 @@ const gradientId = `load-history-fade-${Math.random().toString(36).slice(2, 8)}`
       <span class="modern-load-chart__legend-item"><i class="modern-load-chart__swatch modern-load-chart__swatch--inflight" />{{ t('credentialLoad.chartInflight') }}</span>
       <span class="modern-load-chart__legend-item"><i class="modern-load-chart__swatch modern-load-chart__swatch--queued" />{{ t('credentialLoad.chartQueued') }}</span>
       <span class="modern-load-chart__legend-item"><i class="modern-load-chart__swatch modern-load-chart__swatch--silent" />{{ t('credentialLoad.chartSilent') }}({{ t('credentialLoad.chartRightAxis') }})</span>
-      <span class="modern-load-chart__legend-item"><i class="modern-load-chart__swatch modern-load-chart__swatch--capacity" />{{ t('credentialLoad.chartCapacityLine') }}</span>
+      <span class="modern-load-chart__legend-item"><i class="modern-load-chart__swatch modern-load-chart__swatch--capacity" />{{ t('credentialLoad.chartCapacityLine') }} {{ props.capacity }}</span>
     </div>
     <div class="modern-load-chart__plot">
       <AppSvg
@@ -241,6 +244,7 @@ const gradientId = `load-history-fade-${Math.random().toString(36).slice(2, 8)}`
         </g>
         <text v-for="tick in xTicks" :key="tick.label" :x="tick.x" :y="height - 8" class="modern-load-chart__tick">{{ tick.label }}</text>
         <line
+          v-if="capacityVisible"
           :x1="padLeft" :x2="width - padRight" :y1="capacityY" :y2="capacityY"
           class="modern-load-chart__capacity"
         />

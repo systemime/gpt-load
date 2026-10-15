@@ -36,12 +36,15 @@ interface ChartPoint {
 }
 
 const leftMax = computed(() => {
-  let peak = props.capacity > 0 ? props.capacity : 0
+  let peak = 0
   for (const point of props.samples) {
     peak = Math.max(peak, point.inflight, point.queued)
   }
   return niceMax(peak)
 })
+
+// 容量高于量程时参考线会压扁整条并发线, 改为图例展示数值。
+const capacityVisible = computed(() => props.capacity > 0 && props.capacity <= leftMax.value)
 
 const silentPeak = computed(() => {
   let peak = 0
@@ -86,7 +89,7 @@ const inflightArea = computed(() => {
   return `${line} L${last.x.toFixed(1)},${baselineY.value.toFixed(1)} L${first.x.toFixed(1)},${baselineY.value.toFixed(1)} Z`
 })
 
-const capacityY = computed(() => points.value.yLeft(props.capacity))
+const capacityY = computed(() => points.value.yLeft(Math.min(props.capacity, leftMax.value)))
 
 const leftTicks = computed(() => {
   const ticks: { value: number; y: number }[] = []
@@ -200,7 +203,7 @@ const gradientId = `credential-load-fade-${Math.random().toString(36).slice(2, 8
       <span><i class="credential-load__swatch credential-load__swatch--inflight" />{{ t('monitor.credentials.chartInflight') }}</span>
       <span><i class="credential-load__swatch credential-load__swatch--queued" />{{ t('monitor.credentials.chartQueued') }}</span>
       <span><i class="credential-load__swatch credential-load__swatch--silent" />{{ t('monitor.credentials.chartSilent') }}({{ t('monitor.credentials.chartRightAxis') }})</span>
-      <span><i class="credential-load__swatch credential-load__swatch--capacity" />{{ t('monitor.credentials.chartCapacityLine') }}</span>
+      <span><i class="credential-load__swatch credential-load__swatch--capacity" />{{ t('monitor.credentials.chartCapacityLine') }} {{ props.capacity }}</span>
     </div>
     <div class="credential-load__chart-plot">
       <svg
@@ -225,7 +228,7 @@ const gradientId = `credential-load-fade-${Math.random().toString(36).slice(2, 8
           <text :x="width - padRight + 6" :y="tick.y + 4" class="credential-load__chart-tick credential-load__chart-tick--right">{{ tick.value }}</text>
         </g>
         <text v-for="tick in xTicks" :key="tick.label" :x="tick.x" :y="height - 8" class="credential-load__chart-tick">{{ tick.label }}</text>
-        <line :x1="padLeft" :x2="width - padRight" :y1="capacityY" :y2="capacityY" class="credential-load__chart-capacity" />
+        <line v-if="capacityVisible" :x1="padLeft" :x2="width - padRight" :y1="capacityY" :y2="capacityY" class="credential-load__chart-capacity" />
         <path v-if="inflightArea" :d="inflightArea" :fill="`url(#${gradientId})`" />
         <path v-if="queuedPath" :d="queuedPath" class="credential-load__chart-line credential-load__chart-line--queued" />
         <path v-if="silentPath" :d="silentPath" class="credential-load__chart-line credential-load__chart-line--silent" />
