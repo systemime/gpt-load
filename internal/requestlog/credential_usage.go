@@ -20,8 +20,8 @@ func (service *Service) CredentialWindowUsage(ctx context.Context, weekAnchorMS 
 
 	// 凭证级锚点覆盖: 每个不同窗口单独聚合(组数 = 不同锚点数, 通常 0~2)。
 	anchorRows := make([]struct {
-		ID     uint   `gorm:"column:id"`
-		Anchor int64  `gorm:"column:week_reset_anchor_ms"`
+		ID     uint  `gorm:"column:id"`
+		Anchor int64 `gorm:"column:week_reset_anchor_ms"`
 	}, 0, 8)
 	if err := service.db.WithContext(ctx).
 		Table("credentials").
@@ -47,11 +47,12 @@ func (service *Service) CredentialWindowUsage(ctx context.Context, weekAnchorMS 
 	idRows := make([]struct {
 		ID uint
 	}, 0, 32)
-	if err := service.db.WithContext(ctx).
-		Table("credentials").
-		Select("id").
-		Where("id NOT IN ?", overridden).
-		Scan(&idRows).Error; err != nil {
+	query := service.db.WithContext(ctx).Table("credentials").Select("id")
+	// overridden 为空时 NOT IN () 会退化成 NOT IN (NULL) 而漏掉全部凭证。
+	if len(overridden) > 0 {
+		query = query.Where("id NOT IN ?", overridden)
+	}
+	if err := query.Scan(&idRows).Error; err != nil {
 		return nil, err
 	}
 	for _, row := range idRows {
@@ -81,11 +82,11 @@ func (service *Service) appendWindowUsage(
 		return nil
 	}
 	rows := make([]struct {
-		CredentialID uint   `gorm:"column:credential_id"`
-		Requests5h   int64  `gorm:"column:requests_5h"`
-		Tokens5h     int64  `gorm:"column:tokens_5h"`
-		Requests7d   int64  `gorm:"column:requests_7d"`
-		Tokens7d     int64  `gorm:"column:tokens_7d"`
+		CredentialID uint    `gorm:"column:credential_id"`
+		Requests5h   int64   `gorm:"column:requests_5h"`
+		Tokens5h     int64   `gorm:"column:tokens_5h"`
+		Requests7d   int64   `gorm:"column:requests_7d"`
+		Tokens7d     int64   `gorm:"column:tokens_7d"`
 		Credits5h    float64 `gorm:"column:credits_5h"`
 		Credits7d    float64 `gorm:"column:credits_7d"`
 	}, 0, 16)
