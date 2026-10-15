@@ -1072,6 +1072,42 @@ func TestHandlerRecordsNonStreamingResultStatsByAction(t *testing.T) {
 	}
 }
 
+// 错峰只在 RetryNextCandidate 生效且尊重注入值: 第一发 401 换下一个凭证,
+// 注入 40ms 延迟, 断言总耗时 >= 40ms 且请求最终成功。
+func TestHandlerStaggersNextCandidateRetry(t *testing.T) {
+	now := time.Date(2026, time.October, 15, 10, 0, 0, 0, time.UTC)
+	forwarder := &scriptedForwarder{results: []UpstreamResult{
+		{
+			StatusCode: http.StatusUnauthorized, Header: make(http.Header), Body: []byte(`{"error":"invalid key"}`),
+			ClassificationBody: []byte(`{"error":"invalid key"}`), RequestWritten: true,
+		},
+		{
+			StatusCode: http.StatusOK, Header: make(http.Header), Body: []byte(`{"ok":true}`), RequestWritten: true,
+		},
+	}}
+	engine, handler, _, _ := newStatsHandlerTestRuntime(t, forwarder, "sk-first", "sk-second")
+	handler.retryStagger = func() time.Duration { return 40 * time.Millisecond }
+	handler.now = func() time.Time { return now }
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/chat/completions",
+		bytes.NewBufferString(`{"model":"gpt-4o"}`),
+	)
+	request.Header.Set("Authorization", "Bearer gl-client")
+	start := time.Now()
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+	elapsed := time.Since(start)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", recorder.Code)
+	}
+	if elapsed < 40*time.Millisecond {
+		t.Fatalf("elapsed = %v, want >= 40ms stagger before next candidate", elapsed)
+	}
+}
+
 func TestHandlerRecordsInvalidKeyPerAttempt(t *testing.T) {
 	now := time.Date(2026, time.July, 22, 10, 0, 0, 0, time.UTC)
 	forwarder := &scriptedForwarder{results: []UpstreamResult{
@@ -5378,6 +5414,8 @@ func newHandlerForTestWithStats(
 		health.NewMutationCoordinator(),
 		nil, nil, nil,
 	)
+	// 测试直构造路径验证错峰逻辑, 本身不睡眠; 专项计时测试单独注入。
+	handler.retryStagger = nil
 
 	return handler, manager, registry
 }
@@ -5444,6 +5482,7 @@ func newConvertedFallbackHandlerTestRuntime(
 		health.NewStatsStore(), health.NewMutationCoordinator(),
 		nil, nil, nil,
 	)
+	handler.retryStagger = nil
 	handler.channels = channelRegistry
 
 	engine := gin.New()

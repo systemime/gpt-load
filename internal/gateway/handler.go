@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"strings"
@@ -121,15 +122,17 @@ type Handler struct {
 	authFailureEvents   *utils.RateLimitedEventCounter
 	routeNotFoundEvents *utils.RateLimitedEventCounter
 	escalation          *rateLimitEscalation
-	lifecycle           *httplifecycle.Coordinator
-	affinityCache       *affinity.Cache
-	credentialSlots     *state.CredentialSlots
-	responseBindings    *state.ResponseBindings
-	websocketLimits     websocketLimits
-	websocketBudget     websocketBudget
-	liveOpener          execution.LiveOpener
-	liveSessions        *liveSessions
-	liveConfig          config.CodexLiveConfig
+	// retryStagger 返回"换下一个凭证"重试前的错峰延迟; nil 表示禁用(测试直构造)。
+	retryStagger     func() time.Duration
+	lifecycle        *httplifecycle.Coordinator
+	affinityCache    *affinity.Cache
+	credentialSlots  *state.CredentialSlots
+	responseBindings *state.ResponseBindings
+	websocketLimits  websocketLimits
+	websocketBudget  websocketBudget
+	liveOpener       execution.LiveOpener
+	liveSessions     *liveSessions
+	liveConfig       config.CodexLiveConfig
 }
 
 func (handler *Handler) freezeAttemptPricing(
@@ -186,6 +189,7 @@ func NewHandler(
 		limiter: limiter, requestLogSink: requestLogSink, priceTables: priceTables,
 		affinityCache:    affinity.NewCache(),
 		escalation:       newRateLimitEscalation(),
+		retryStagger:     defaultRetryStagger,
 		credentialSlots:  registry.Slots(),
 		responseBindings: state.NewResponseBindings(),
 		websocketLimits:  defaultWebsocketLimits(),
@@ -260,6 +264,25 @@ func NewHandlerWithLifecycle(
 	handler.catalog = catalogRuntime
 	handler.usageReader = usageReader
 	return handler
+}
+
+// defaultRetryStagger 错峰窗口 0.5-1s: 立即换凭证重试会让并发请求在亚秒内
+// 同步扇出到全部凭证, 上游限流/线路抖动时一次故障放大成全场故障
+// (upstream_connect_failed / upstream_protocol_error 成片出现即此形态)。
+func defaultRetryStagger() time.Duration {
+	return 500*time.Millisecond + time.Duration(rand.Int64N(int64(500*time.Millisecond)))
+}
+
+// staggerNextCandidate 在进入下一凭证尝试前等待错峰窗口, 客户端断开则立即放行,
+// 由循环里的取消检查收尾。仅作用于 RetryNextCandidate; 认证刷新重试不错峰。
+func (handler *Handler) staggerNextCandidate(ginContext *gin.Context, decision health.Decision) {
+	if handler.retryStagger == nil || decision.Retry != health.RetryNextCandidate {
+		return
+	}
+	select {
+	case <-time.After(handler.retryStagger()):
+	case <-ginContext.Request.Context().Done():
+	}
 }
 
 type unlimitedAccessKeyRPMLimiter struct{}
@@ -1545,6 +1568,7 @@ func (handler *Handler) executeAttempts(
 		}
 		if result.EmptyResponseBeforeCommit {
 			if decision.Retry != health.RetryNone && forwardAttempts < forwardAttemptLimit {
+				handler.staggerNextCandidate(ginContext, decision)
 				lastEmptyResponse = &deferredAttempt{
 					result:        result,
 					decision:      decision,
@@ -1560,6 +1584,7 @@ func (handler *Handler) executeAttempts(
 		}
 		if result.ProviderErrorBeforeCommit {
 			if decision.Retry != health.RetryNone {
+				handler.staggerNextCandidate(ginContext, decision)
 				lastProviderError = &deferredAttempt{
 					result:        result,
 					decision:      decision,
@@ -1588,6 +1613,7 @@ func (handler *Handler) executeAttempts(
 				result: result, decision: decision, upstreamModel: optionalModelValue(selection.UpstreamModelID), attemptIndex: recordedAttempt,
 			}
 			if decision.Retry != health.RetryNone {
+				handler.staggerNextCandidate(ginContext, decision)
 				recorder.retryIfAnotherForward(recordedAttempt)
 				continue
 			}
@@ -1609,6 +1635,7 @@ func (handler *Handler) executeAttempts(
 			return
 		}
 		if decision.Retry != health.RetryNone {
+			handler.staggerNextCandidate(ginContext, decision)
 			deferred := &deferredAttempt{
 				result: result, decision: decision, upstreamModel: optionalModelValue(selection.UpstreamModelID), attemptIndex: recordedAttempt,
 			}
