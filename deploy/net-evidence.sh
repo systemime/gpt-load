@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# 网络抖动判定诊断脚本: 每步探测后直接给出【判定】, 结尾输出综合结论与报障话术。
+# 网络抖动判定诊断脚本: 每步实时输出(同时落盘), 打印所用命令, 逐步给出【判定】。
 # 用法: bash /opt/gpt-load/net-evidence.sh [探测秒数, 默认 120]
-# 输出: /tmp/net-evidence-<时间戳>.txt
+# 输出: 终端实时滚动 + /tmp/net-evidence-<时间戳>.txt
 set -u
 SECONDS_BUDGET=${1:-120}
 TARGET_HOST=open.bigmodel.cn
@@ -10,28 +10,28 @@ STAMP=$(date +%F_%H%M%S)
 OUT="/tmp/net-evidence-$STAMP.txt"
 PING_COUNT=100
 CURL_ROUNDS=30
-declare -a FINDINGS=()   # 判定收集: 每条 "步骤|级别|一句话"
+declare -a FINDINGS=()
 
 verdict() { # $1=步骤名 $2=OK|WARN|BAD $3=说明
-  local level=$2 text=$3
-  case "$level" in
-    OK)   echo "  【判定】✅ 正常 — $text" ;;
-    WARN) echo "  【判定】⚠️ 异常 — $text"; FINDINGS+=("$1|WARN|$text") ;;
-    BAD)  echo "  【判定】❌ 异常 — $text"; FINDINGS+=("$1|BAD|$text") ;;
+  case "$2" in
+    OK)   echo "  【判定】✅ 正常 — $3" ;;
+    WARN) echo "  【判定】⚠️ 异常 — $3"; FINDINGS+=("$1|$3") ;;
+    BAD)  echo "  【判定】❌ 异常 — $3"; FINDINGS+=("$1|$3") ;;
   esac
 }
 loss_of() { ping -c "$1" -i 0.2 -w "$SECONDS_BUDGET" "$2" 2>&1 | tail -2; }
-parse_ping() { # stdin: ping tail → "loss% rtt_avg rtt_mdev" (保留1位小数)
+parse_ping() { # stdin: ping tail → "loss% rtt_avg rtt_mdev" (1位小数)
   awk '/packet loss/ {for(i=1;i<=NF;i++) if($i ~ /%/) {gsub(/%/,"",$i); loss=$i}}
        /rtt/ {split($4,a,"/"); avg=a[2]; split($6,b,"/"); mdev=b[1]}
        END {printf "%.1f %.1f %.1f", loss+0, avg+0, mdev+0}'
 }
 
-{
+main() {
 echo "==== 网络抖动判定诊断 $(date '+%F %T %Z') → $TARGET_HOST ($TARGET_IP) ===="
 echo
 
 echo "━━━ [1] 首跳: 家蹭路由 192.168.1.1 (局域网定界) ━━━"
+echo "\$ ping -c $PING_COUNT -i 0.2 192.168.1.1"
 P1=$(loss_of "$PING_COUNT" 192.168.1.1 | parse_ping)
 set -- $P1
 L1=${1:-0}; A1=${2:-0}; M1=${3:-0}
@@ -44,6 +44,7 @@ fi
 echo
 
 echo "━━━ [2] 出网第一段: 223.5.5.5 (过路由器后的运营商接入网) ━━━"
+echo "\$ ping -c $PING_COUNT -i 0.2 223.5.5.5"
 P2=$(loss_of "$PING_COUNT" 223.5.5.5 | parse_ping)
 set -- $P2
 L2=${1:-0}; A2=${2:-0}; M2=${3:-0}
@@ -56,6 +57,7 @@ fi
 echo
 
 echo "━━━ [3] 厂商边缘 ICMP 对照: $TARGET_IP ━━━"
+echo "\$ ping -c $PING_COUNT -i 0.2 $TARGET_IP"
 P3=$(loss_of "$PING_COUNT" "$TARGET_IP" | parse_ping)
 set -- $P3
 L3=${1:-0}; A3=${2:-0}; M3=${3:-0}
@@ -68,6 +70,7 @@ fi
 echo
 
 echo "━━━ [4] TCP 443 握手探测 ×$CURL_ROUNDS (与平台 connect_failed 同机理) ━━━"
+echo "\$ curl --connect-timeout 8 -o /dev/null -s -w '%{time_connect} %{http_code}\\n' https://$TARGET_HOST/   # ×$CURL_ROUNDS"
 echo "time_connect(秒) HTTP码  |  >1s=SYN重传(丢包)  000/28=SYN 8s 超时"
 TIMEOUTS=0; SLOW=0; OKN=0; SUM=0
 for _ in $(seq 1 "$CURL_ROUNDS"); do
@@ -93,12 +96,14 @@ echo
 
 echo "━━━ [5] 逐跳定位 mtr TCP 443 (丢包点定界) ━━━"
 if command -v mtr >/dev/null 2>&1; then
+  echo "\$ mtr -4 -T -P 443 -c 100 -r -w $TARGET_HOST"
   MTR_OUT=$(mtr -4 -T -P 443 -c 100 -r -w "$TARGET_HOST" 2>&1 | sed '/mtr-packet error/d')
 else
-  MTR_OUT=$(traceroute -T -p 443 -w 2 -q 3 "$TARGET_IP" 2>&1; echo "(安装 mtr-tiny 可得逐跳丢包率)")
+  echo "\$ traceroute -T -p 443 -w 2 -q 3 $TARGET_IP   (安装 mtr-tiny 可得逐跳丢包率)"
+  MTR_OUT=$(traceroute -T -p 443 -w 2 -q 3 "$TARGET_IP" 2>&1)
 fi
 echo "$MTR_OUT"
-# 解析: mtr -w 行 = hop编号.|-- 主机 丢包% 包数 ..., 取有IP应答的跳, 找丢包>=10%的起点
+# 解析: mtr -w 行内取丢包%与首个IPv4, 丢包>=10% 视为丢包跳
 DEMARC=$(echo "$MTR_OUT" | awk '
   /\|--/ {
     loss=""; ip=""
@@ -122,6 +127,7 @@ echo
 
 echo "━━━ [6] 平台侧错误(最近 10 分钟, 与上面同一时间轴) ━━━"
 DB=/var/lib/docker/volumes/gpt-load_gpt-load-data/_data/gpt-load.db
+echo "\$ sqlite3(只读副本) request_logs 最近10分钟失败按分钟/错误码"
 rm -f /tmp/ne-audit.db*; cp "$DB" /tmp/ne-audit.db; cp "$DB-wal" /tmp/ne-audit.db-wal 2>/dev/null; cp "$DB-shm" /tmp/ne-audit.db-shm 2>/dev/null
 ERRROWS=""
 if [ -x /tmp/sqlite3 ]; then
@@ -144,21 +150,16 @@ echo "━━━ 综合判定 ━━━"
 if [ ${#FINDINGS[@]} -eq 0 ]; then
   echo "✅ 本轮全部探测正常 — 抖动未发生或已恢复。请在平台再次出现 upstream_connect_failed 时立刻重跑本脚本。"
 else
-  for f in "${FINDINGS[@]}"; do IFS='|' read -r step level text <<<"$f"; echo "❌ [$step] $text"; done
+  for f in "${FINDINGS[@]}"; do IFS='|' read -r step text <<<"$f"; echo "❌ [$step] $text"; done
   echo
-  echo "因果链(可直接引用):"
+  echo "因果链:"
   echo "  1. 平台 connect_failed 平均 7s 失败 = 内核 SYN 重传 3 次放弃 → 请求死在 TCP 握手, 业务未到达厂商;"
   echo "  2. 本脚本 TCP 握手探测同分钟出现超时/重传 → 与平台错误同机理的原始观测;"
   echo "  3. mtr 定界丢包起点在运营商跳之后、首跳 0% → 故障段在 ISP, 不在你方任何设备。"
-  echo
-  echo "──── 报障话术(复制给运维/ISP, 数字已按本轮实测填好) ────"
-  echo "我方服务器经中国移动家宽接入(城域网关 10.66.0.1 一类), 访问 $TARGET_HOST($TARGET_IP) 的 TCP 443 业务持续受丢包影响。"
-  [ "${L1:-0}" != "0" ] || echo "证据: 首跳 $PING_COUNT 包 0% 丢包/抖动 ${M1:-0}ms(局域网干净);"
-  echo "证据: 出网 223.5.5.5 丢包 ${L2:-?}%; TCP443 握手 30 次中 SYN 超时 ${TIMEOUTS:-0} 次、重传 ${SLOW:-0} 次;"
-  [ -z "$FIRST_LOSSY_HOP" ] || { set -- $FIRST_LOSSY_HOP; echo "mtr(TCP443) 定界: 丢包起点第 ${1} 跳(${2}) 丢 ${3}%, 其后骨干跳(如 221.183.x/117.186.x)丢 57~83%;"; }
-  echo "同期平台业务在 TCP 握手阶段失败(附 net-evidence 全文)。请排查城域网出口至省网段的拥塞/丢包。"
 fi
 echo
-echo "==== 结束 $(date '+%F %T') 文件: $OUT ===="
-} > "$OUT" 2>&1
-echo "$OUT"
+echo "==== 结束 $(date '+%F %T') ===="
+}
+
+echo "输出文件: $OUT" >&2
+main 2>&1 | tee "$OUT"
