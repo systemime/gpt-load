@@ -135,11 +135,11 @@ func (service *Service) appendWindowUsage(
 		Table(subquery).
 		Select(`credential_id,
 SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN 1 ELSE 0 END) AS requests_5h,
-SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN (uncached_input_tokens + output_tokens) * `+quotaTokenMultiplierSQL()+` ELSE 0 END) AS tokens_5h,
-SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN uncached_input_tokens + output_tokens ELSE 0 END) AS raw_tokens_5h,
+CAST(SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN (uncached_input_tokens + output_tokens) * `+quotaTokenMultiplierSQL()+` ELSE 0 END) AS INTEGER) AS tokens_5h,
+CAST(SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN uncached_input_tokens + output_tokens ELSE 0 END) AS INTEGER) AS raw_tokens_5h,
 SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN 1 ELSE 0 END) AS requests_7d,
-SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN (uncached_input_tokens + output_tokens) * `+quotaTokenMultiplierSQL()+` ELSE 0 END) AS tokens_7d,
-SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN uncached_input_tokens + output_tokens ELSE 0 END) AS raw_tokens_7d,
+CAST(SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN (uncached_input_tokens + output_tokens) * `+quotaTokenMultiplierSQL()+` ELSE 0 END) AS INTEGER) AS tokens_7d,
+CAST(SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN uncached_input_tokens + output_tokens ELSE 0 END) AS INTEGER) AS raw_tokens_7d,
 SUM(CASE WHEN source = 2 AND completed_at_ms > ? THEN `+glmCreditCoefficientSQL+` ELSE 0 END) AS credits_5h,
 SUM(CASE WHEN source = 2 THEN `+glmCreditCoefficientSQL+` ELSE 0 END) AS credits_7d`,
 			fiveHoursMS, fiveHoursMS, fiveHoursMS, weekStartMS, weekStartMS, weekStartMS, fiveHoursMS).
