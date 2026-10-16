@@ -22,6 +22,10 @@ type ExecutionAttempt struct {
 	Now                 time.Time
 }
 
+// TransportSkipGroupThreshold: 同一请求内连续第 N 次"未发出即连接失败"
+// 触发整组跳过; 之前先换候选重试(每次间隔含 0.5-1s 抖动)。
+const TransportSkipGroupThreshold = 2
+
 // JudgeExecution decides the complete GPT-Load retry and runtime effect for one
 // executor result.
 func JudgeExecution(attempt ExecutionAttempt, decisionContext DecisionContext) Decision {
@@ -141,12 +145,18 @@ func JudgeExecution(attempt ExecutionAttempt, decisionContext DecisionContext) D
 			return decision(FailureCategoryAmbiguous, originForEvidence(attempt.Evidence), attempt.Evidence.ScopeHint,
 				RetryNone, EffectNone, "fallback.not_sent")
 		case execution.ErrorKindTransport, execution.ErrorKindTimeout:
+			// 连接即失败(线路抖动/DNS/拒连)默认先换候选重试;
+			// 同一请求内连续多次失败才判定整组不可达, 避免单次抖动直接打死请求。
+			effect := EffectNone
+			if decisionContext.ConsecutiveTransportNotSent >= TransportSkipGroupThreshold {
+				effect = EffectSkipGroup
+			}
 			return decision(
 				FailureCategoryUpstreamHostError,
 				execution.ErrorOriginUpstream,
 				execution.ErrorScopeGroup,
 				RetryNextCandidate,
-				EffectSkipGroup,
+				effect,
 				"transport.not_sent",
 			)
 		case execution.ErrorKindConversionUnsupported:

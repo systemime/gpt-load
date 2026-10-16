@@ -2141,10 +2141,10 @@ func TestHandlerReportsFinalAttemptInDebugHeaders(t *testing.T) {
 			upstreamKeys: []string{"sk-retry-one", "sk-retry-two"}, wantAttempts: "2",
 		},
 		{
-			name:         "transport skips only group",
+			name:         "transport retries before skipping group",
 			results:      []UpstreamResult{{Err: errors.New("dial failed")}},
 			upstreamKeys: []string{"sk-dial-one", "sk-dial-two"},
-			wantAttempts: "1",
+			wantAttempts: "2",
 		},
 	}
 
@@ -3179,7 +3179,8 @@ func TestHandlerDoesNotRetryRequestWrittenAmbiguousPreCommitFailures(t *testing.
 	}
 }
 
-func TestHandlerSkipsGroupAfterRequestNotWrittenTransportFailure(t *testing.T) {
+func TestHandlerRetriesTransportFailureBeforeSkippingGroup(t *testing.T) {
+	// 单凭证组: 第一次连接即失败先换候选重试(同一凭证), 第二次成功 → 200。
 	forwarder := &scriptedForwarder{streamResults: []UpstreamResult{
 		{Err: errors.New("dial failed"), RequestWritten: false},
 		{StatusCode: http.StatusOK, RequestWritten: true, Committed: true},
@@ -3194,9 +3195,29 @@ func TestHandlerSkipsGroupAfterRequestNotWrittenTransportFailure(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusBadGateway || len(forwarder.streamInputs) != 1 {
+	if recorder.Code != http.StatusOK || len(forwarder.streamInputs) != 2 {
 		t.Fatalf("status/attempts = %d/%d, body=%s",
 			recorder.Code, len(forwarder.streamInputs), recorder.Body.String())
+	}
+
+	// 连续失败: 单凭证池在计数达阈值前就耗尽候选, 断言尝试次数 = 池大小。
+	exhausted := &scriptedForwarder{streamResults: []UpstreamResult{
+		{Err: errors.New("dial failed"), RequestWritten: false},
+		{Err: errors.New("dial failed"), RequestWritten: false},
+		{Err: errors.New("dial failed"), RequestWritten: false},
+	}}
+	engine2, _, _ := newHandlerTestRuntime(t, exhausted, "sk-first", "sk-second")
+	request2 := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/chat/completions",
+		bytes.NewBufferString(`{"model":"gpt-4o","stream":true}`),
+	)
+	request2.Header.Set("Authorization", "Bearer gl-client")
+	recorder2 := httptest.NewRecorder()
+	engine2.ServeHTTP(recorder2, request2)
+
+	if len(exhausted.streamInputs) != 2 {
+		t.Fatalf("stream attempts = %d, want 2 (single-credential pool exhausts before threshold skip)", len(exhausted.streamInputs))
 	}
 }
 
@@ -4426,11 +4447,11 @@ func TestHandlerReturnsStableTerminalReasons(t *testing.T) {
 			wantStatus:   http.StatusGatewayTimeout, wantCode: "upstream_timeout",
 		},
 		{
-			name: "connection failure skips only group",
+			name: "connection failure retries then skips group",
 			path: "/v1/chat/completions", accessKey: "gl-client", body: `{"model":"gpt-4o"}`,
 			upstreamKeys: []string{"sk-one", "sk-two"},
 			results:      []UpstreamResult{{Err: errors.New("dial failed")}},
-			wantStatus:   http.StatusBadGateway, wantCode: "upstream_connect_failed", wantAttempts: 1,
+			wantStatus:   http.StatusBadGateway, wantCode: "upstream_connect_failed", wantAttempts: 2,
 		},
 	}
 

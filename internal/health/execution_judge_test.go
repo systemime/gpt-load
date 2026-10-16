@@ -19,6 +19,8 @@ func TestJudgeExecutionUsesNeutralEvidenceAndReplayBoundary(t *testing.T) {
 	tests := []struct {
 		name    string
 		attempt ExecutionAttempt
+		// context 返回非零字段覆盖默认 DecisionContext(当前只用计数覆盖)。
+		context func() DecisionContext
 		want    Result
 	}{
 		{
@@ -47,20 +49,33 @@ func TestJudgeExecutionUsesNeutralEvidenceAndReplayBoundary(t *testing.T) {
 			want: Result{Category: FailureCategoryOK, Action: ActionTerminate},
 		},
 		{
-			name: "not sent transport error skips group",
+			name: "not sent transport error retries first candidate switch",
 			attempt: ExecutionAttempt{
 				DispatchState: execution.DispatchNotSent,
 				Evidence:      evidence(execution.ErrorKindTransport, 0, "dial failed"),
 			},
+			want: Result{Category: FailureCategoryUpstreamHostError, Action: ActionRetry},
+		},
+		{
+			name: "not sent transport error skips group at threshold",
+			attempt: ExecutionAttempt{
+				DispatchState: execution.DispatchNotSent,
+				Evidence:      evidence(execution.ErrorKindTransport, 0, "dial failed"),
+			},
+			context: func() DecisionContext {
+				base := DecisionContext{DefaultRateLimitCooldown: time.Minute}
+				base.ConsecutiveTransportNotSent = TransportSkipGroupThreshold
+				return base
+			},
 			want: Result{Category: FailureCategoryUpstreamHostError, Action: ActionSkipGroup},
 		},
 		{
-			name: "not sent timeout skips group",
+			name: "not sent timeout retries first, skips group at threshold",
 			attempt: ExecutionAttempt{
 				DispatchState: execution.DispatchNotSent,
 				Evidence:      evidence(execution.ErrorKindTimeout, 0, "connect timeout"),
 			},
-			want: Result{Category: FailureCategoryUpstreamHostError, Action: ActionSkipGroup},
+			want: Result{Category: FailureCategoryUpstreamHostError, Action: ActionRetry},
 		},
 		{
 			name: "not sent subscription reauthorization retries another credential",
@@ -398,12 +413,19 @@ func TestJudgeExecutionUsesNeutralEvidenceAndReplayBoundary(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := JudgeExecution(test.attempt, DecisionContext{
+			context := DecisionContext{
 				DefaultRateLimitCooldown: time.Minute,
 				CredentialRefreshable:    true,
 				Method:                   http.MethodPost,
 				Operation:                execution.OperationChatCompletion,
-			})
+			}
+			if test.context != nil {
+				override := test.context()
+				if override.ConsecutiveTransportNotSent > 0 {
+					context.ConsecutiveTransportNotSent = override.ConsecutiveTransportNotSent
+				}
+			}
+			got := JudgeExecution(test.attempt, context)
 			if err := got.Validate(); err != nil {
 				t.Fatalf("JudgeExecution() returned invalid decision %#v: %v", got, err)
 			}

@@ -139,8 +139,8 @@ func TestJudgeUpstreamResultUsesNeutralExecutionEvidence(t *testing.T) {
 			Kind: execution.ErrorKindTransport, Summary: "connection failed",
 		},
 	}, now, health.DecisionContext{DefaultRateLimitCooldown: time.Minute})
-	if result.Category != health.FailureCategoryUpstreamHostError || result.Effect != health.EffectSkipGroup {
-		t.Fatalf("JudgeExecution(not sent) = %#v", result)
+	if result.Category != health.FailureCategoryUpstreamHostError || result.Effect != health.EffectNone {
+		t.Fatalf("JudgeExecution(not sent, first failure) = %#v", result)
 	}
 }
 
@@ -159,7 +159,9 @@ func TestJudgeUpstreamResultKeepsUpstreamTimeoutOutOfDownstreamCancellation(t *t
 			Error:         evidence,
 		},
 	)
-	decision := judgeUpstreamResult(upstream, time.Now(), health.DecisionContext{})
+	decision := judgeUpstreamResult(upstream, time.Now(), health.DecisionContext{
+		ConsecutiveTransportNotSent: health.TransportSkipGroupThreshold,
+	})
 	if decision.Category != health.FailureCategoryUpstreamHostError ||
 		decision.Origin != execution.ErrorOriginUpstream ||
 		decision.Scope != execution.ErrorScopeGroup ||

@@ -1829,7 +1829,7 @@ func TestHandlerTerminalAttemptUsageKeepsRouteAttribution(t *testing.T) {
 			wantUpstreamModel:   "gpt-4o",
 		},
 		{
-			name: "transport failure keeps the skipped group attempt",
+			name: "transport failure keeps the last attempted credential attribution",
 			forwarder: &scriptedForwarder{results: []UpstreamResult{
 				{Err: errors.New("transport one")},
 				{Err: errors.New("transport two")},
@@ -1838,8 +1838,8 @@ func TestHandlerTerminalAttemptUsageKeepsRouteAttribution(t *testing.T) {
 			upstreamKeys:        []string{"sk-first", "sk-second", "sk-third"},
 			wantStatus:          telemetry.RequestStatusError,
 			wantGroupID:         1,
-			wantCredentialID:    1,
-			wantAttemptSequence: 1,
+			wantCredentialID:    3,
+			wantAttemptSequence: 3,
 			wantUpstreamModel:   "gpt-4o",
 		},
 		{

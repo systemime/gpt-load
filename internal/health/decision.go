@@ -63,6 +63,9 @@ type DecisionContext struct {
 	CredentialRefreshable    bool
 	Method                   string
 	Operation                execution.Operation
+	// ConsecutiveTransportNotSent 是本请求此前连续"未发出即连接失败"的次数。
+	// 低于阈值先换下一个候选重试(线路抖动常瞬恢复), 达到阈值才整组跳过。
+	ConsecutiveTransportNotSent int
 }
 
 // Decision is the complete business decision for one execution attempt.

@@ -1074,6 +1074,8 @@ func (handler *Handler) executeAttempts(
 		cachedPrepared = &prepared
 		return prepared
 	}
+	// 连接即失败的连续计数: 判定层按它决定先换候选还是整组跳过。
+	transportNotSentRetries := 0
 	decisionContextForSelection := func(selection scheduler.Selection) health.DecisionContext {
 		defaultRateLimitCooldown := fixedCooldown
 		credentialRefreshable := false
@@ -1086,10 +1088,11 @@ func (handler *Handler) executeAttempts(
 			method = parsed.Method
 		}
 		return health.DecisionContext{
-			DefaultRateLimitCooldown: defaultRateLimitCooldown,
-			CredentialRefreshable:    credentialRefreshable,
-			Method:                   method,
-			Operation:                operation,
+			DefaultRateLimitCooldown:    defaultRateLimitCooldown,
+			CredentialRefreshable:       credentialRefreshable,
+			Method:                      method,
+			Operation:                   operation,
+			ConsecutiveTransportNotSent: transportNotSentRetries,
 		}
 	}
 	recordCandidatePreparationFailure := func(
@@ -1492,6 +1495,11 @@ func (handler *Handler) executeAttempts(
 			attemptNow,
 			decisionContextForSelection(selection),
 		)
+		if decision.RuleID == "transport.not_sent" {
+			transportNotSentRetries++
+		} else if decision.RuleID != "" {
+			transportNotSentRetries = 0
+		}
 		if result.Committed {
 			if recorder != nil {
 				recorder.finishedAt = attemptCompleted
