@@ -7,11 +7,16 @@ import "sync"
 // (token×系数/10000, 非高峰半价)从 usage_stats 换算, 与厂商计费同口径。
 type CredentialUsage struct {
 	Requests5h int64
+	// Tokens5h/Tokens7d 为配额压力口径: 按厂商扣减倍数折算
+	// (见 requestlog.quotaModelWeights), 阶段 3 相对份额与负载页压力都用它。
 	Tokens5h   int64
-	Requests7d int64
 	Tokens7d   int64
-	Credits5h  float64
-	Credits7d  float64
+	Requests7d int64
+	// RawTokens5h/RawTokens7d 为原始 token 展示口径, 与厂商返回字面值一致。
+	RawTokens5h int64
+	RawTokens7d int64
+	Credits5h   float64
+	Credits7d   float64
 }
 
 // CredentialUsageTracker 是进程内的凭证用量快照表, 由控制面后台循环

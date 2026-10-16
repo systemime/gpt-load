@@ -216,9 +216,10 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 			RuntimeState: string(classifyHealthKey(groupView, view, observedTime)),
 			Inflight:     slots.Inflight(view.ID),
 			Queued:       slots.Waiting(view.ID),
+			// 展示口径用原始 token; 压力(Pressure)与阶段 3 用配额折算后的 Tokens5h。
 			Usage: credentialLoadUsage{
-				Requests5h: usage.Requests5h, Tokens5h: usage.Tokens5h,
-				Requests7d: usage.Requests7d, Tokens7d: usage.Tokens7d,
+				Requests5h: usage.Requests5h, Tokens5h: usage.RawTokens5h,
+				Requests7d: usage.Requests7d, Tokens7d: usage.RawTokens7d,
 			},
 			Pressure:  pressures[view.ID],
 			Credits5h: usage.Credits5h,

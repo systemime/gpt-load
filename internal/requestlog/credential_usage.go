@@ -2,10 +2,50 @@ package requestlog
 
 import (
 	"context"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"gpt-load/internal/state"
 )
+
+// quotaModelWeights 模型配额权重: 厂商按该倍数扣减配额(精确匹配模型名),
+// 计入配额压力(阶段 3 系数)的 token 由此折算; 页面展示保持原始 token。
+var quotaModelWeights = map[string]float64{
+	"glm-5.3": 2.0,
+}
+
+// quotaTokenMultiplierSQL 生成稳定的 CASE 倍率表达式: 同倍数模型合并一个分支。
+// 在聚合 SQL 内联求值, 与 glmCreditCoefficientSQL 同套路, 不产生额外扫描。
+func quotaTokenMultiplierSQL() string {
+	weights := make([]float64, 0, 4)
+	byWeight := make(map[float64][]string, 4)
+	for modelName, weight := range quotaModelWeights {
+		if _, seen := byWeight[weight]; !seen {
+			weights = append(weights, weight)
+		}
+		byWeight[weight] = append(byWeight[weight], modelName)
+	}
+	sort.Float64s(weights)
+	var builder strings.Builder
+	builder.WriteString("(CASE ")
+	for _, weight := range weights {
+		modelNames := byWeight[weight]
+		sort.Strings(modelNames)
+		quoted := make([]string, 0, len(modelNames))
+		for _, modelName := range modelNames {
+			quoted = append(quoted, "'"+strings.ReplaceAll(modelName, "'", "''")+"'")
+		}
+		builder.WriteString("WHEN model IN (")
+		builder.WriteString(strings.Join(quoted, ","))
+		builder.WriteString(") THEN ")
+		builder.WriteString(strconv.FormatFloat(weight, 'f', -1, 64))
+		builder.WriteString(" ")
+	}
+	builder.WriteString("ELSE 1.0 END)")
+	return builder.String()
+}
 
 // CredentialWindowUsage 聚合每个凭证在滚动 5h 与周窗口内的
 // 请求数与消耗 token(未缓存输入+输出), 供用量均衡(阶段 3)与负载端点使用。
@@ -85,24 +125,29 @@ func (service *Service) appendWindowUsage(
 		CredentialID uint    `gorm:"column:credential_id"`
 		Requests5h   int64   `gorm:"column:requests_5h"`
 		Tokens5h     int64   `gorm:"column:tokens_5h"`
+		RawTokens5h  int64   `gorm:"column:raw_tokens_5h"`
 		Requests7d   int64   `gorm:"column:requests_7d"`
 		Tokens7d     int64   `gorm:"column:tokens_7d"`
+		RawTokens7d  int64   `gorm:"column:raw_tokens_7d"`
 		Credits5h    float64 `gorm:"column:credits_5h"`
 		Credits7d    float64 `gorm:"column:credits_7d"`
 	}, 0, 16)
 	// request_logs 与 usage_stats 两表窗口一致, UNION ALL 子查询统一聚合:
 	// credits 仅来自 usage_stats, 请求数/token 来自 request_logs。
-	subquery := "(SELECT credential_id, completed_at_ms, uncached_input_tokens, output_tokens, 0 AS cache_read_tokens, '' AS model, 1 AS source FROM request_logs UNION ALL SELECT credential_id, bucket_start_ms AS completed_at_ms, uncached_input_tokens, output_tokens, cache_read_tokens, model, 2 AS source FROM usage_stats) AS w"
+	// request_logs 侧模型取实际上游模型, 空则退回客户端模型(失败行 token 为零, 倍率无影响)。
+	subquery := "(SELECT credential_id, completed_at_ms, uncached_input_tokens, output_tokens, 0 AS cache_read_tokens, COALESCE(NULLIF(upstream_model, ''), client_model) AS model, 1 AS source FROM request_logs UNION ALL SELECT credential_id, bucket_start_ms AS completed_at_ms, uncached_input_tokens, output_tokens, cache_read_tokens, model, 2 AS source FROM usage_stats) AS w"
 	if err := service.db.WithContext(ctx).
 		Table(subquery).
 		Select(`credential_id,
 SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN 1 ELSE 0 END) AS requests_5h,
-SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN uncached_input_tokens + output_tokens ELSE 0 END) AS tokens_5h,
+SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN (uncached_input_tokens + output_tokens) * `+quotaTokenMultiplierSQL()+` ELSE 0 END) AS tokens_5h,
+SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN uncached_input_tokens + output_tokens ELSE 0 END) AS raw_tokens_5h,
 SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN 1 ELSE 0 END) AS requests_7d,
-SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN uncached_input_tokens + output_tokens ELSE 0 END) AS tokens_7d,
+SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN (uncached_input_tokens + output_tokens) * `+quotaTokenMultiplierSQL()+` ELSE 0 END) AS tokens_7d,
+SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN uncached_input_tokens + output_tokens ELSE 0 END) AS raw_tokens_7d,
 SUM(CASE WHEN source = 2 AND completed_at_ms > ? THEN `+glmCreditCoefficientSQL+` ELSE 0 END) AS credits_5h,
 SUM(CASE WHEN source = 2 THEN `+glmCreditCoefficientSQL+` ELSE 0 END) AS credits_7d`,
-			fiveHoursMS, fiveHoursMS, weekStartMS, weekStartMS, fiveHoursMS).
+			fiveHoursMS, fiveHoursMS, fiveHoursMS, weekStartMS, weekStartMS, weekStartMS, fiveHoursMS).
 		Where("credential_id IN ? AND completed_at_ms > ?", credentialIDs, weekStartMS).
 		Group("credential_id").
 		Scan(&rows).Error; err != nil {
@@ -110,12 +155,14 @@ SUM(CASE WHEN source = 2 THEN `+glmCreditCoefficientSQL+` ELSE 0 END) AS credits
 	}
 	for _, row := range rows {
 		usage[row.CredentialID] = state.CredentialUsage{
-			Requests5h: row.Requests5h,
-			Tokens5h:   row.Tokens5h,
-			Requests7d: row.Requests7d,
-			Tokens7d:   row.Tokens7d,
-			Credits5h:  row.Credits5h,
-			Credits7d:  row.Credits7d,
+			Requests5h:  row.Requests5h,
+			Tokens5h:    row.Tokens5h,
+			RawTokens5h: row.RawTokens5h,
+			Requests7d:  row.Requests7d,
+			Tokens7d:    row.Tokens7d,
+			RawTokens7d: row.RawTokens7d,
+			Credits5h:   row.Credits5h,
+			Credits7d:   row.Credits7d,
 		}
 	}
 	return nil
