@@ -127,6 +127,9 @@ echo
 
 echo "━━━ [6] 平台侧错误(最近 10 分钟, 与上面同一时间轴) ━━━"
 DB=/var/lib/docker/volumes/gpt-load_gpt-load-data/_data/gpt-load.db
+if [ ! -f "$DB" ]; then
+  echo "(本机无 gpt-load 数据卷, 跳过 — 平台错误请到 172.16.4.10 上跑本脚本获取)"
+else
 echo "\$ sqlite3(只读副本) request_logs 最近10分钟失败按分钟/错误码"
 rm -f /tmp/ne-audit.db*; cp "$DB" /tmp/ne-audit.db; cp "$DB-wal" /tmp/ne-audit.db-wal 2>/dev/null; cp "$DB-shm" /tmp/ne-audit.db-shm 2>/dev/null
 ERRROWS=""
@@ -143,6 +146,7 @@ else
   echo "$ERRROWS" | sed 's/^/  /'
   CF=$(echo "$ERRROWS" | awk -F'|' '$2 ~ /connect_failed/ {s+=$3} END{print s+0}')
   verdict "平台错误" BAD "窗口内平台失败 $CF 次 connect_failed — 与 [4][5] 网络异常同时窗, 因果成立"
+fi
 fi
 echo
 
