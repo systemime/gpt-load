@@ -284,6 +284,8 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 		original = effective
 	}
 	query := scheduler.Query{ClientProtocol: protocol.OpenAIResponses, Operation: execution.OperationResponsesCreate, RouteRequirement: execution.RouteRequirementNative, ResponsesStorePreference: original.metadata.ResponsesStorePreference, ExternalModel: original.metadata.Model, AccessKey: key, AllowedCredentialIDs: make(map[uint]struct{}), AllowedCredentialRefs: make(map[uint]state.CredentialRef)}
+	// 槽位权重按(auto-model 改写后的)路由模型判定, 准入与释放同一值。
+	slotWeight := state.SlotWeight(*original.metadata.Model)
 	query.ResponsesWebsocket = &original.required
 	groups := scheduler.CandidateGroupIDsForQuery(snapshot, query)
 	for _, ref := range h.registry.CaptureActiveCredentialRefs(groups) {
@@ -552,16 +554,16 @@ func (s *websocketConnection) executeTurn(turn websocketTurn) {
 		// OnceFunc 幂等: 显式调用与 defer 双保险, 恰好释放一次。
 		acquiredCredential := selection.CredentialID
 		trackCredentialSlot := requiredRef == nil
-		if trackCredentialSlot && !h.credentialSlots.TryAcquire(selection.CredentialID) {
+		if trackCredentialSlot && !h.credentialSlots.TryAcquire(selection.CredentialID, slotWeight) {
 			if !iterator.SelectionBeyondCap() {
 				releaseGroup()
 				continue
 			}
-			h.credentialSlots.ForceAcquire(selection.CredentialID)
+			h.credentialSlots.ForceAcquire(selection.CredentialID, slotWeight)
 		}
 		releaseAttempt := sync.OnceFunc(func() {
 			if trackCredentialSlot {
-				h.credentialSlots.Release(acquiredCredential)
+				h.credentialSlots.Release(acquiredCredential, slotWeight)
 			}
 			releaseGroup()
 		})

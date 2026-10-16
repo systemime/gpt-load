@@ -10,18 +10,13 @@ import (
 	"gpt-load/internal/state"
 )
 
-// quotaModelWeights 模型配额权重: 厂商按该倍数扣减配额(精确匹配模型名),
-// 计入配额压力(阶段 3 系数)的 token 由此折算; 页面展示保持原始 token。
-var quotaModelWeights = map[string]float64{
-	"glm-5.3": 2.0,
-}
-
 // quotaTokenMultiplierSQL 生成稳定的 CASE 倍率表达式: 同倍数模型合并一个分支。
-// 在聚合 SQL 内联求值, 与 glmCreditCoefficientSQL 同套路, 不产生额外扫描。
+// 权重表取 state.ModelQuotaWeights(与并发槽位占用共用), 在聚合 SQL 内联求值,
+// 与 glmCreditCoefficientSQL 同套路, 不产生额外扫描。
 func quotaTokenMultiplierSQL() string {
 	weights := make([]float64, 0, 4)
 	byWeight := make(map[float64][]string, 4)
-	for modelName, weight := range quotaModelWeights {
+	for modelName, weight := range state.ModelQuotaWeights {
 		if _, seen := byWeight[weight]; !seen {
 			weights = append(weights, weight)
 		}

@@ -46,12 +46,13 @@ func (handler *Handler) admitBeyondCap(
 	allowedCredentialRefs map[uint]state.CredentialRef,
 	baseQuery scheduler.Query,
 	preferredCredentialID uint,
+	slotWeight int64,
 	selection scheduler.Selection,
 ) (scheduler.Selection, state.CredentialRef, bool) {
 	ref := allowedCredentialRefs[selection.CredentialID]
 	slots := handler.credentialSlots
 	if slots.EffectiveLimit(selection.CredentialID) <= 0 {
-		slots.ForceAcquire(selection.CredentialID)
+		slots.ForceAcquire(selection.CredentialID, slotWeight)
 		return selection, ref, true
 	}
 	ids := make([]uint, 0, len(allowedCredentialRefs))
@@ -80,12 +81,12 @@ func (handler *Handler) admitBeyondCap(
 	queueEnabled := snapshot.Settings.CredentialQueueEnabled
 	if !queueEnabled {
 		// 排队关闭: 预算内重选, 全满则直接放行原候选(永不因 cap 拒绝)。
-		id, ok := slots.AcquireAnyWithin(ids, preferredCredentialID, 0, neverDone)
+		id, ok := slots.AcquireAnyWithin(ids, preferredCredentialID, slotWeight, 0, neverDone)
 		if !ok {
-			slots.ForceAcquire(selection.CredentialID)
+			slots.ForceAcquire(selection.CredentialID, slotWeight)
 			return selection, ref, true
 		}
-		return handler.selectionForBudgetCredential(snapshot, baseQuery, allowedCredentialRefs, id, selection, ref)
+		return handler.selectionForBudgetCredential(snapshot, baseQuery, allowedCredentialRefs, id, slotWeight, selection, ref)
 	}
 	if maxWaiting >= maxBudget*2 {
 		// 防雪崩: 深度超限即拒绝, 不再堆等待者。
@@ -93,14 +94,14 @@ func (handler *Handler) admitBeyondCap(
 		return scheduler.Selection{}, state.CredentialRef{}, false
 	}
 	id, ok := slots.AcquireAnyWithin(
-		ids, preferredCredentialID,
+		ids, preferredCredentialID, slotWeight,
 		snapshot.Settings.CredentialQueueTimeout, ginContext.Request.Context().Done(),
 	)
 	if !ok {
 		handler.rejectQueued(ginContext, recorder, snapshot)
 		return scheduler.Selection{}, state.CredentialRef{}, false
 	}
-	return handler.selectionForBudgetCredential(snapshot, baseQuery, allowedCredentialRefs, id, selection, ref)
+	return handler.selectionForBudgetCredential(snapshot, baseQuery, allowedCredentialRefs, id, slotWeight, selection, ref)
 }
 
 // selectionForBudgetCredential 把预算档选中的凭证还原为完整 Selection
@@ -111,6 +112,7 @@ func (handler *Handler) selectionForBudgetCredential(
 	baseQuery scheduler.Query,
 	allowedCredentialRefs map[uint]state.CredentialRef,
 	credentialID uint,
+	slotWeight int64,
 	fallback scheduler.Selection,
 	fallbackRef state.CredentialRef,
 ) (scheduler.Selection, state.CredentialRef, bool) {
@@ -120,8 +122,8 @@ func (handler *Handler) selectionForBudgetCredential(
 	ref, allowed := allowedCredentialRefs[credentialID]
 	if !allowed {
 		// 重选键不可用: 归还其槽位后回落原选择, 不泄漏。
-		handler.credentialSlots.Release(credentialID)
-		handler.credentialSlots.ForceAcquire(fallback.CredentialID)
+		handler.credentialSlots.Release(credentialID, slotWeight)
+		handler.credentialSlots.ForceAcquire(fallback.CredentialID, slotWeight)
 		return fallback, fallbackRef, true
 	}
 	scoped := baseQuery
@@ -134,8 +136,8 @@ func (handler *Handler) selectionForBudgetCredential(
 	selection, err := scopedIterator.Next()
 	if err != nil || selection.CredentialID != credentialID {
 		// 重建失败(weight=0/冷却/目标不可用等): 归还重选键槽位, 强制回落原选择。
-		handler.credentialSlots.Release(credentialID)
-		handler.credentialSlots.ForceAcquire(fallback.CredentialID)
+		handler.credentialSlots.Release(credentialID, slotWeight)
+		handler.credentialSlots.ForceAcquire(fallback.CredentialID, slotWeight)
 		return fallback, fallbackRef, true
 	}
 	return selection, ref, true

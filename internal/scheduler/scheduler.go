@@ -2,8 +2,8 @@
 package scheduler
 
 import (
-	"fmt"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -92,6 +92,7 @@ type Iterator struct {
 	allowedCredentialIDs  map[uint]struct{}
 	preferredCredentialID uint
 	credentialSlots       *state.CredentialSlots
+	slotWeight            int64
 	credentialUsage       CredentialUsageView
 	usageBalance          bool
 	beyondCap             bool
@@ -162,6 +163,7 @@ func newWithClock(
 		allowedCredentialIDs:  cloneAllowedCredentialIDs(query),
 		preferredCredentialID: query.PreferredCredentialID,
 		credentialSlots:       query.CredentialSlots,
+		slotWeight:            slotWeightForQuery(query),
 		credentialUsage:       query.CredentialUsage,
 		usageBalance:          query.UsageBalance,
 		tried:                 make(map[uint]struct{}),
@@ -398,16 +400,25 @@ func (iterator *Iterator) Next() (Selection, error) {
 	return Selection{}, ErrExhausted
 }
 
+// slotWeightForQuery 返回本查询每个请求占用的并发槽位权重(按外部模型判定)。
+func slotWeightForQuery(query Query) int64 {
+	if query.ExternalModel == nil || *query.ExternalModel == "" {
+		return 1
+	}
+	return state.SlotWeight(*query.ExternalModel)
+}
+
 // priorityCandidates 跨原生与转换选档；失败后降至下一可用档，最低档保留未试候选。
-// filterCappedCredentials 剔除在途已达 cap 的凭证; 全部达 cap 时保留原候选
-// 并返回 exempted=true, 由调用方透传给准入层强制放行, 保证 cap 永不制造不可用。
+// filterCappedCredentials 剔除在途占用已达 cap 的凭证(按槽位权重判可用);
+// 全部达 cap 时保留原候选并返回 exempted=true, 由调用方透传给准入层强制放行,
+// 保证 cap 永不制造不可用。
 func (iterator *Iterator) filterCappedCredentials(candidates []weightedCredential) ([]weightedCredential, bool) {
 	if iterator.credentialSlots == nil || len(candidates) == 0 {
 		return candidates, false
 	}
 	available := make([]weightedCredential, 0, len(candidates))
 	for _, candidate := range candidates {
-		if iterator.credentialSlots.Available(candidate.meta.ID) {
+		if iterator.credentialSlots.Available(candidate.meta.ID, iterator.slotWeight) {
 			available = append(available, candidate)
 		}
 	}

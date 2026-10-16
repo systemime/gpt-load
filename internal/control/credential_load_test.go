@@ -80,7 +80,7 @@ func TestCredentialLoadEndpointAggregatesWindowsErrorsAndInflight(t *testing.T) 
 	fixture.registry.SetCooldown(2, time.Now().Add(time.Hour))
 	slots := fixture.registry.Slots()
 	slots.Configure(2)
-	if !slots.TryAcquire(1) {
+	if !slots.TryAcquire(1, 1) {
 		t.Fatal("occupy credential 1 failed")
 	}
 	if _, err := fixture.manager.Publish(state.CompileInput{

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"syscall"
 	"testing"
+	"time"
 
 	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -67,7 +68,8 @@ func TestPassthroughHTTPErrorProducesNeutralFailureHints(t *testing.T) {
 		},
 		{
 			name: "GLM weekly cap extracts resume time", status: http.StatusTooManyRequests,
-			body:  `{"error":{"message":"已达到 7 天使用上限，2026-10-15 08:59:59 后可继续使用。如需超限额按量付费使用，可联系管理员开启超额按量付费。","type":"usage_limit_error"}}`,
+			// 恢复时间取未来 7 天, 避免硬编码日期过期后 RetryAfter 归零。
+			body:  `{"error":{"message":"已达到 7 天使用上限，` + time.Now().Add(7*24*time.Hour).Format("2006-01-02 15:04:05") + ` 后可继续使用。如需超限额按量付费使用，可联系管理员开启超额按量付费。","type":"usage_limit_error"}}`,
 			want: execution.FailureHintRateLimited, scope: execution.ErrorScopeCredential,
 		},
 		{

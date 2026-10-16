@@ -20,14 +20,14 @@ func TestHandlerOverflowsCredentialAtConcurrencyCapAndRelearnsAffinity(t *testin
 	snapshot.Settings.CredentialConcurrencyLimit = 1
 	handler.credentialSlots.Configure(1)
 
-	if !handler.credentialSlots.TryAcquire(1) {
+	if !handler.credentialSlots.TryAcquire(1, 1) {
 		t.Fatal("occupying credential 1 failed")
 	}
 	engine := newAffinityTestEngine(t, handler)
 	body := `{"model":"gpt-4o","messages":[{"role":"user","content":"parallel subagent burst"}]}`
 	serveAffinityRequest(t, engine, body)
 
-	handler.credentialSlots.Release(1)
+	handler.credentialSlots.Release(1, 1)
 	serveAffinityRequest(t, engine, body)
 
 	assertAffinityAttemptKeys(t, forwarder.inputs, []string{"sk-two", "sk-two"})
@@ -42,8 +42,8 @@ func TestHandlerServesWhenAllCredentialsCapped(t *testing.T) {
 	snapshot := manager.Current()
 	snapshot.Settings.CredentialConcurrencyLimit = 1
 	handler.credentialSlots.Configure(1)
-	handler.credentialSlots.TryAcquire(1)
-	handler.credentialSlots.TryAcquire(2)
+	handler.credentialSlots.TryAcquire(1, 1)
+	handler.credentialSlots.TryAcquire(2, 1)
 
 	engine := newAffinityTestEngine(t, handler)
 	serveAffinityRequest(t, engine, `{"model":"gpt-4o","messages":[{"role":"user","content":"burst"}]}`)
@@ -61,8 +61,8 @@ func TestHandlerQueuesBeyondCapWithinGroupBudget(t *testing.T) {
 	snapshot := manager.Current()
 	snapshot.Settings.CredentialConcurrencyLimit = 1
 	handler.credentialSlots.Configure(1)
-	handler.credentialSlots.TryAcquire(1)
-	handler.credentialSlots.TryAcquire(2)
+	handler.credentialSlots.TryAcquire(1, 1)
+	handler.credentialSlots.TryAcquire(2, 1)
 
 	engine := newAffinityTestEngine(t, handler)
 	serveAffinityRequest(t, engine, `{"model":"gpt-4o","messages":[{"role":"user","content":"queued burst"}]}`)
@@ -83,8 +83,8 @@ func TestHandlerQueueTimeoutReturns429(t *testing.T) {
 	handler.credentialSlots.Configure(1)
 	// 预算 = cap(1) + slack(2) = 3: 把两个凭证都填满到预算。
 	for i := 0; i < 3; i++ {
-		handler.credentialSlots.TryAcquireWithin(1, 3)
-		handler.credentialSlots.TryAcquireWithin(2, 3)
+		handler.credentialSlots.TryAcquireWithin(1, 1, 3)
+		handler.credentialSlots.TryAcquireWithin(2, 1, 3)
 	}
 
 	engine := newAffinityTestEngine(t, handler)
@@ -119,9 +119,9 @@ func TestHandlerBudgetTierRequeuesOnlyWhenAllKeysAtBudget(t *testing.T) {
 	handler.credentialSlots.Configure(1)
 	// 凭证 1 填满到预算(3), 凭证 2 只在 cap(1): 公平序会选 1, 但 2 有预算内空位。
 	for i := 0; i < 3; i++ {
-		handler.credentialSlots.TryAcquireWithin(1, 3)
+		handler.credentialSlots.TryAcquireWithin(1, 1, 3)
 	}
-	handler.credentialSlots.TryAcquire(2)
+	handler.credentialSlots.TryAcquire(2, 1)
 
 	engine := newAffinityTestEngine(t, handler)
 	started := time.Now()
@@ -142,8 +142,8 @@ func TestHandlerQueueWakesOnOtherKeyReleaseAndRepicks(t *testing.T) {
 	snapshot.Settings.CredentialQueueTimeout = 5 * time.Second
 	handler.credentialSlots.Configure(1)
 	for i := 0; i < 3; i++ {
-		handler.credentialSlots.TryAcquireWithin(1, 3)
-		handler.credentialSlots.TryAcquireWithin(2, 3)
+		handler.credentialSlots.TryAcquireWithin(1, 1, 3)
+		handler.credentialSlots.TryAcquireWithin(2, 1, 3)
 	}
 
 	engine := newAffinityTestEngine(t, handler)
@@ -155,7 +155,7 @@ func TestHandlerQueueWakesOnOtherKeyReleaseAndRepicks(t *testing.T) {
 		for handler.credentialSlots.Waiting(2) == 0 && time.Now().Before(deadline) {
 			time.Sleep(time.Millisecond)
 		}
-		handler.credentialSlots.Release(2)
+		handler.credentialSlots.Release(2, 1)
 	}()
 	serveAffinityRequest(t, engine, `{"model":"gpt-4o","messages":[{"role":"user","content":"queued repick"}]}`)
 	<-done

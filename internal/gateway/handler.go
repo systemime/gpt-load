@@ -960,6 +960,13 @@ func (handler *Handler) executeAttempts(
 ) {
 	stream := originalMetadata.Stream
 	operation := originalMetadata.Operation
+	// 槽位权重按路由模型判定(auto-model 改写后跟目标模型);
+	// 准入、释放、豁免全链路用同一值, 保证计数配对。
+	slotModel := externalModel
+	if recorder.autoDecision != nil {
+		slotModel = recorder.autoDecision.Selection.TargetModel
+	}
+	slotWeight := state.SlotWeight(slotModel)
 	var redactionCipher encryption.RedactionCipher
 	if !snapshot.RequestRedaction.Empty() || redactionBusinessProtocol(selectedDialect.Protocol()) {
 		var err error
@@ -1203,14 +1210,14 @@ func (handler *Handler) executeAttempts(
 		// 响应续接不设限; 满 cap 且有其他候选时换候选; 全池达 cap 走预算档
 		// 每次评估重选(阶段 2), 重选后重建 Selection; 超深/超时 429。
 		trackCredentialSlot := originalMetadata.PreviousResponseID == ""
-		if trackCredentialSlot && !handler.credentialSlots.TryAcquire(selection.CredentialID) {
+		if trackCredentialSlot && !handler.credentialSlots.TryAcquire(selection.CredentialID, slotWeight) {
 			if !iterator.SelectionBeyondCap() {
 				continue
 			}
 			var admitted bool
 			selection, ref, admitted = handler.admitBeyondCap(
 				ginContext, recorder, snapshot, allowedCredentialRefs, schedulingQuery,
-				requestAffinity.preferredCredentialID, selection,
+				requestAffinity.preferredCredentialID, slotWeight, selection,
 			)
 			if !admitted {
 				return
@@ -1222,7 +1229,7 @@ func (handler *Handler) executeAttempts(
 		acquiredCredentialID := selection.CredentialID
 		releaseAttempt := sync.OnceFunc(func() {
 			if trackCredentialSlot {
-				handler.credentialSlots.Release(acquiredCredentialID)
+				handler.credentialSlots.Release(acquiredCredentialID, slotWeight)
 			}
 			// 快照过期时 acquireGroupConcurrency 返回 (nil, failure), 此处不可裸调。
 			if releaseGroup != nil {
@@ -1762,22 +1769,23 @@ func (handler *Handler) executeAttempts(
 	// 调度耗尽但全池在途满载(瞬时并发冲爆): 503 会变成用户可见报错, 改发
 	// 429 + Retry-After, 客户端自动退避重试, 排队闸门回收容量后即可成功。
 	// 仅当确实满载才替换; 真"无候选"(冷却/停用/权重 0)仍透传 503。
-	if snapshot.Settings.CredentialQueueEnabled && handler.allowedCredentialsAllAtCapacity(allowedCredentialRefs) {
+	if snapshot.Settings.CredentialQueueEnabled && handler.allowedCredentialsAllAtCapacity(allowedCredentialRefs, slotWeight) {
 		handler.rejectQueued(ginContext, recorder, snapshot)
 		return
 	}
 	handler.completeReason(ginContext, recorder, reasonNoCandidate)
 }
 
-// allowedCredentialsAllAtCapacity 报告允许集合内每个凭证(不计空引用)是否都达到准入阈值。
-func (handler *Handler) allowedCredentialsAllAtCapacity(allowedCredentialRefs map[uint]state.CredentialRef) bool {
+// allowedCredentialsAllAtCapacity 报告允许集合内每个凭证(不计空引用)是否
+// 都没有容纳本请求权重(slotWeight)的空闲额度。
+func (handler *Handler) allowedCredentialsAllAtCapacity(allowedCredentialRefs map[uint]state.CredentialRef, slotWeight int64) bool {
 	checked := 0
 	for id := range allowedCredentialRefs {
 		if id == 0 {
 			continue
 		}
 		checked++
-		if handler.credentialSlots.Available(id) {
+		if handler.credentialSlots.Available(id, slotWeight) {
 			return false
 		}
 	}

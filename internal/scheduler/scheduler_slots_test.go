@@ -23,7 +23,7 @@ func TestIteratorSkipsCredentialsAtSlotCapacity(t *testing.T) {
 		{ID: 11, GroupID: 1}, {ID: 12, GroupID: 1},
 	}}
 	slots := state.NewCredentialSlots(1)
-	if !slots.TryAcquire(11) {
+	if !slots.TryAcquire(11, 1) {
 		t.Fatal("occupy key 11 failed")
 	}
 	iterator := New(schedulerSnapshot(), source, slotTestQuery(slots))
@@ -47,7 +47,7 @@ func TestIteratorHonorsPreferredOnlyBelowSlotCapacity(t *testing.T) {
 		t.Fatalf("Next() = (%#v, %v), want preferred key 11", selection, err)
 	}
 
-	if !slots.TryAcquire(11) {
+	if !slots.TryAcquire(11, 1) {
 		t.Fatal("occupy key 11 failed")
 	}
 	capped := New(schedulerSnapshot(), source, query)
@@ -62,8 +62,8 @@ func TestIteratorServesWhenAllCredentialsCapped(t *testing.T) {
 		{ID: 11, GroupID: 1}, {ID: 12, GroupID: 1},
 	}}
 	slots := state.NewCredentialSlots(1)
-	slots.TryAcquire(11)
-	slots.TryAcquire(12)
+	slots.TryAcquire(11, 1)
+	slots.TryAcquire(12, 1)
 	iterator := New(schedulerSnapshot(), source, slotTestQuery(slots))
 	selection, err := iterator.Next()
 	if err != nil || selection.CredentialID == 0 {
@@ -104,7 +104,7 @@ func TestIteratorUnlimitedSlotsAdmitEverything(t *testing.T) {
 	}}
 	slots := state.NewCredentialSlots(0)
 	for i := 0; i < 5; i++ {
-		slots.TryAcquire(11)
+		slots.TryAcquire(11, 1)
 	}
 	iterator := New(schedulerSnapshot(), source, slotTestQuery(slots))
 	selection, err := iterator.Next()
@@ -125,8 +125,8 @@ func TestIteratorUsageBalancePrefersLessConsumedCredential(t *testing.T) {
 	}}
 	// score = (在途/cap)×P: 在途并列(各 1)时由 5h token 消耗 P 决出低分者。
 	slots := state.NewCredentialSlots(4)
-	slots.TryAcquire(11)
-	slots.TryAcquire(12)
+	slots.TryAcquire(11, 1)
+	slots.TryAcquire(12, 1)
 	usage := staticUsageView{11: {Tokens5h: 900}, 12: {Tokens5h: 100}}
 	query := slotTestQuery(slots)
 	query.CredentialUsage = usage
@@ -145,8 +145,8 @@ func TestIteratorUsageBalanceIgnoresWeightsUnderScoreFormula(t *testing.T) {
 	}}
 	// 综合分公式不含权重维度: 同在途下 12 消耗更高即被避让, 权重只影响公平序并列。
 	slots := state.NewCredentialSlots(4)
-	slots.TryAcquire(11)
-	slots.TryAcquire(12)
+	slots.TryAcquire(11, 1)
+	slots.TryAcquire(12, 1)
 	usage := staticUsageView{11: {Tokens5h: 200}, 12: {Tokens5h: 300}}
 	query := slotTestQuery(slots)
 	query.CredentialUsage = usage
