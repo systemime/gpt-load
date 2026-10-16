@@ -49,7 +49,7 @@ const capacityVisible = computed(() => props.capacity > 0 && props.capacity <= l
 const silentPeak = computed(() => {
   let peak = 0
   for (const point of props.samples) {
-    peak = Math.max(peak, point.silent_transfers)
+    peak = Math.max(peak, point.silent_success, point.silent_failed)
   }
   return peak
 })
@@ -67,7 +67,7 @@ const points = computed(() => {
   const yRight = (value: number) => padTop + innerH * (1 - value / rightMax.value)
   const toPoints = (pick: (point: CredentialLoadHistoryPoint) => number): ChartPoint[] =>
     list.map((point) => ({ x: x(point.at_ms), y: pick(point) }))
-  return { x, yLeft, yRight, inflight: toPoints((p) => yLeft(p.inflight)), queued: toPoints((p) => yLeft(p.queued)), silent: toPoints((p) => yRight(p.silent_transfers)) }
+  return { x, yLeft, yRight, inflight: toPoints((p) => yLeft(p.inflight)), queued: toPoints((p) => yLeft(p.queued)), silentOK: toPoints((p) => yRight(p.silent_success)), silentFail: toPoints((p) => yRight(p.silent_failed)) }
 })
 
 const path = (series: ChartPoint[]) =>
@@ -77,7 +77,8 @@ const path = (series: ChartPoint[]) =>
 
 const inflightPath = computed(() => path(points.value.inflight))
 const queuedPath = computed(() => path(points.value.queued))
-const silentPath = computed(() => path(points.value.silent))
+const silentOKPath = computed(() => path(points.value.silentOK))
+const silentFailPath = computed(() => path(points.value.silentFail))
 const baselineY = computed(() => points.value.yLeft(0))
 
 const inflightArea = computed(() => {
@@ -134,7 +135,7 @@ const hoverTopY = computed(() => {
   return Math.min(
     points.value.yLeft(point.inflight),
     points.value.yLeft(point.queued),
-    points.value.yRight(point.silent_transfers),
+    Math.min(points.value.yRight(point.silent_success), points.value.yRight(point.silent_failed)),
   )
 })
 
@@ -164,7 +165,8 @@ const hoverDots = computed(() => {
   return [
     { cls: 'credential-load__chart-dot--inflight', cx: hoverX.value, cy: points.value.yLeft(point.inflight) },
     { cls: 'credential-load__chart-dot--queued', cx: hoverX.value, cy: points.value.yLeft(point.queued) },
-    { cls: 'credential-load__chart-dot--silent', cx: hoverX.value, cy: points.value.yRight(point.silent_transfers) },
+    { cls: 'credential-load__chart-dot--silent-ok', cx: hoverX.value, cy: points.value.yRight(point.silent_success) },
+    { cls: 'credential-load__chart-dot--silent-fail', cx: hoverX.value, cy: points.value.yRight(point.silent_failed) },
   ]
 })
 
@@ -202,7 +204,8 @@ const gradientId = `credential-load-fade-${Math.random().toString(36).slice(2, 8
     <div class="credential-load__chart-legend">
       <span><i class="credential-load__swatch credential-load__swatch--inflight" />{{ t('monitor.credentials.chartInflight') }}</span>
       <span><i class="credential-load__swatch credential-load__swatch--queued" />{{ t('monitor.credentials.chartQueued') }}</span>
-      <span><i class="credential-load__swatch credential-load__swatch--silent" />{{ t('monitor.credentials.chartSilent') }}({{ t('monitor.credentials.chartRightAxis') }})</span>
+      <span><i class="credential-load__swatch credential-load__swatch--silent-ok" />{{ t('monitor.credentials.chartSilentOK') }}({{ t('monitor.credentials.chartRightAxis') }})</span>
+      <span><i class="credential-load__swatch credential-load__swatch--silent-fail" />{{ t('monitor.credentials.chartSilentFail') }}({{ t('monitor.credentials.chartRightAxis') }})</span>
       <span><i class="credential-load__swatch credential-load__swatch--capacity" />{{ t('monitor.credentials.chartCapacityLine') }} {{ props.capacity }}</span>
     </div>
     <div class="credential-load__chart-plot">
@@ -231,7 +234,8 @@ const gradientId = `credential-load-fade-${Math.random().toString(36).slice(2, 8
         <line v-if="capacityVisible" :x1="padLeft" :x2="width - padRight" :y1="capacityY" :y2="capacityY" class="credential-load__chart-capacity" />
         <path v-if="inflightArea" :d="inflightArea" :fill="`url(#${gradientId})`" />
         <path v-if="queuedPath" :d="queuedPath" class="credential-load__chart-line credential-load__chart-line--queued" />
-        <path v-if="silentPath" :d="silentPath" class="credential-load__chart-line credential-load__chart-line--silent" />
+        <path v-if="silentOKPath" :d="silentOKPath" class="credential-load__chart-line credential-load__chart-line--silent-ok" />
+        <path v-if="silentFailPath" :d="silentFailPath" class="credential-load__chart-line credential-load__chart-line--silent-fail" />
         <path v-if="inflightPath" :d="inflightPath" class="credential-load__chart-line credential-load__chart-line--inflight" />
         <g v-if="hover">
           <line
@@ -272,10 +276,17 @@ const gradientId = `credential-load-fade-${Math.random().toString(36).slice(2, 8
           </span>
           <span class="credential-load__chart-tooltip-row">
             <span class="credential-load__chart-tooltip-key">
-              <i class="credential-load__swatch credential-load__swatch--silent" />
-              {{ t('monitor.credentials.chartSilent') }}
+              <i class="credential-load__swatch credential-load__swatch--silent-ok" />
+              {{ t('monitor.credentials.chartSilentOK') }}
             </span>
-            <strong class="credential-load__chart-tooltip-value">{{ hover.silent_transfers }}</strong>
+            <strong class="credential-load__chart-tooltip-value">{{ hover.silent_success }}</strong>
+          </span>
+          <span class="credential-load__chart-tooltip-row">
+            <span class="credential-load__chart-tooltip-key">
+              <i class="credential-load__swatch credential-load__swatch--silent-fail" />
+              {{ t('monitor.credentials.chartSilentFail') }}
+            </span>
+            <strong class="credential-load__chart-tooltip-value">{{ hover.silent_failed }}</strong>
           </span>
         </div>
       </Transition>
@@ -318,7 +329,10 @@ const gradientId = `credential-load-fade-${Math.random().toString(36).slice(2, 8
 .credential-load__swatch--queued {
   background: var(--color-warning);
 }
-.credential-load__swatch--silent {
+.credential-load__swatch--silent-ok {
+  background: var(--color-success);
+}
+.credential-load__swatch--silent-fail {
   background: var(--color-danger);
 }
 .credential-load__swatch--capacity {
@@ -372,7 +386,10 @@ const gradientId = `credential-load-fade-${Math.random().toString(36).slice(2, 8
 .credential-load__chart-line--queued {
   stroke: var(--color-warning);
 }
-.credential-load__chart-line--silent {
+.credential-load__chart-line--silent-ok {
+  stroke: var(--color-success);
+}
+.credential-load__chart-line--silent-fail {
   stroke: var(--color-danger);
   stroke-dasharray: 4 3;
 }
@@ -389,7 +406,10 @@ const gradientId = `credential-load-fade-${Math.random().toString(36).slice(2, 8
 .credential-load__chart-dot--queued {
   fill: var(--color-warning);
 }
-.credential-load__chart-dot--silent {
+.credential-load__chart-dot--silent-ok {
+  fill: var(--color-success);
+}
+.credential-load__chart-dot--silent-fail {
   fill: var(--color-danger);
 }
 .credential-load__chart-tooltip {

@@ -92,7 +92,7 @@ type runtimeCredentialRegistry interface {
 	IncrFailure(credentialID uint) (int, bool)
 	SetBlacklistedWithChange(credentialID uint) (exists bool, changed bool)
 	ClearFailure(credentialID uint) bool
-	CountSilentTransfer()
+	CountSilentTransferOutcomes(success, failed int64)
 }
 
 type Handler struct {
@@ -958,6 +958,8 @@ func (handler *Handler) executeAttempts(
 	recorder *requestRecorder,
 	quotaAdmission *requestAccessQuotaAdmission,
 ) {
+	// 无感转移结算: 函数返回即请求终态, 按最终成败把转移次数入账到折线图。
+	defer recorder.settleSilentTransfers(handler.registry)
 	stream := originalMetadata.Stream
 	operation := originalMetadata.Operation
 	// 槽位权重按路由模型判定(auto-model 改写后跟目标模型);
@@ -1566,10 +1568,10 @@ func (handler *Handler) executeAttempts(
 			refreshRetry = &credentialRefreshRetry{selection: selection, ref: ref}
 		}
 		if decision.Retry != health.RetryNone {
-			// 无感转移计数: 每次换下一个凭证的重试都算一次(含转移后仍失败的),
-			// 负载页折线图按秒差值展示"系统替用户消化了多少次故障"。
+			// 无感转移计数: 每次换下一个凭证的重试挂到本请求账上,
+			// 终态(defer settle)按"该请求最终成败"结算为成功/失败, 折线图按秒差值展示。
 			if decision.Retry == health.RetryNextCandidate {
-				handler.registry.CountSilentTransfer()
+				recorder.noteSilentTransfer()
 			}
 			iterator.AdvancePriority(selection)
 		}

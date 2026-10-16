@@ -1106,8 +1106,8 @@ func TestHandlerStaggersNextCandidateRetry(t *testing.T) {
 	if elapsed < 40*time.Millisecond {
 		t.Fatalf("elapsed = %v, want >= 40ms stagger before next candidate", elapsed)
 	}
-	if got := registry.SilentTransfers(); got != 1 {
-		t.Fatalf("silent transfers = %d, want 1", got)
+	if success, failed := registry.SilentTransferOutcomes(); success != 1 || failed != 0 {
+		t.Fatalf("silent transfers = (%d, %d), want (1, 0)", success, failed)
 	}
 }
 
@@ -2024,7 +2024,7 @@ func (panicRuntimeRegistry) SetCooldown(uint, time.Time) bool {
 	panic("model endpoint set cooldown")
 }
 
-func (panicRuntimeRegistry) CountSilentTransfer() {
+func (panicRuntimeRegistry) CountSilentTransferOutcomes(success, failed int64) {
 	panic("model endpoint counted silent transfer")
 }
 

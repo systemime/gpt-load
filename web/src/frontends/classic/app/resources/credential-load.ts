@@ -70,7 +70,8 @@ export interface CredentialLoadHistoryPoint {
   at_ms: number
   inflight: number
   queued: number
-  silent_transfers: number
+  silent_success: number
+  silent_failed: number
 }
 
 export interface CredentialLoadReport {
@@ -221,7 +222,8 @@ export function projectCredentialLoad(value: unknown): CredentialLoadReport {
       at_ms: projectSafeInteger(row.at_ms, { minimum: 0 }),
       inflight: projectSafeInteger(row.inflight, { minimum: 0 }),
       queued: projectSafeInteger(row.queued, { minimum: 0 }),
-      silent_transfers: projectSafeInteger(row.silent_transfers, { minimum: 0 }),
+      silent_success: projectSafeInteger(row.silent_success, { minimum: 0 }),
+      silent_failed: projectSafeInteger(row.silent_failed, { minimum: 0 }),
     }
   })
   return {

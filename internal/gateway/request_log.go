@@ -79,6 +79,8 @@ type requestRecorder struct {
 	affinityHit          bool
 	affinityKind         string
 	attempts             []telemetry.Attempt
+	// silentPending 是本请求内已发生的无感转移次数; settle 时按最终成败入账。
+	silentPending        int
 	attemptPricing       []frozenAttemptPricing
 	pendingPricing       frozenAttemptPricing
 	pricingPending       bool
@@ -460,6 +462,35 @@ func (recorder *requestRecorder) completeReason(value reason) {
 	recorder.outcome = requestOutcome{
 		status: telemetry.RequestStatusError, statusCode: value.Status,
 		errorCode: value.Code, errorSummary: value.Message,
+	}
+}
+
+// silentTransferCounter 是注册表暴露的无感转移结算入口。
+type silentTransferCounter interface {
+	CountSilentTransferOutcomes(success, failed int64)
+}
+
+// noteSilentTransfer 记一次本请求内的无感转移(终态时统一结算)。
+func (recorder *requestRecorder) noteSilentTransfer() {
+	if recorder == nil {
+		return
+	}
+	recorder.silentPending++
+}
+
+// settleSilentTransfers 在请求终态时按最终成败结算全部转移次数;
+// 无终态(极端路径)时不入账, 避免污染成功/失败口径。
+func (recorder *requestRecorder) settleSilentTransfers(registry silentTransferCounter) {
+	if recorder == nil || registry == nil || recorder.silentPending == 0 {
+		return
+	}
+	switch recorder.outcome.status {
+	case telemetry.RequestStatusSuccess:
+		registry.CountSilentTransferOutcomes(int64(recorder.silentPending), 0)
+	case "":
+		return
+	default:
+		registry.CountSilentTransferOutcomes(0, int64(recorder.silentPending))
 	}
 }
 

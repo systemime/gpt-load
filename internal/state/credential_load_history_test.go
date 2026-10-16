@@ -11,10 +11,9 @@ func TestLoadHistoryRingAndSilentDelta(t *testing.T) {
 		t.Fatalf("empty snapshot = %#v, want empty non-nil slice", got)
 	}
 
-	registry.CountSilentTransfer()
-	registry.CountSilentTransfer()
+	registry.CountSilentTransferOutcomes(2, 0)
 	registry.RecordLoadSample(1000, 3, 0)
-	registry.CountSilentTransfer()
+	registry.CountSilentTransferOutcomes(0, 1)
 	registry.RecordLoadSample(2000, 5, 1)
 
 	samples := registry.LoadHistorySnapshot()
@@ -22,11 +21,11 @@ func TestLoadHistoryRingAndSilentDelta(t *testing.T) {
 		t.Fatalf("snapshot len = %d, want 2", len(samples))
 	}
 	if samples[0].AtMS != 1000 || samples[0].Inflight != 3 ||
-		samples[0].SilentTransfers != 2 {
+		samples[0].SilentSuccess != 2 || samples[0].SilentFailed != 0 {
 		t.Fatalf("sample[0] = %#v", samples[0])
 	}
-	if samples[1].SilentTransfers != 1 {
-		t.Fatalf("sample[1].SilentTransfers = %d, want delta 1", samples[1].SilentTransfers)
+	if samples[1].SilentSuccess != 0 || samples[1].SilentFailed != 1 {
+		t.Fatalf("sample[1] = %#v, want success delta 0 / failed delta 1", samples[1])
 	}
 
 	// 环回覆盖: 超容量后只保留最近 300 个, 顺序仍为时间升序。

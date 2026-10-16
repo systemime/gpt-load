@@ -47,7 +47,7 @@ const capacityVisible = computed(() => props.capacity > 0 && props.capacity <= l
 const silentPeak = computed(() => {
   let peak = 0
   for (const point of props.samples) {
-    peak = Math.max(peak, point.silentTransfers)
+    peak = Math.max(peak, point.silentSuccess, point.silentFailed)
   }
   return peak
 })
@@ -74,7 +74,8 @@ const points = computed(() => {
     yRight,
     inflight: toPoints((point) => yLeft(point.inflight)),
     queued: toPoints((point) => yLeft(point.queued)),
-    silent: toPoints((point) => yRight(point.silentTransfers)),
+    silentOK: toPoints((point) => yRight(point.silentSuccess)),
+    silentFail: toPoints((point) => yRight(point.silentFailed)),
   }
 })
 
@@ -85,7 +86,8 @@ const path = (series: ChartPoint[]) =>
 
 const inflightPath = computed(() => path(points.value.inflight))
 const queuedPath = computed(() => path(points.value.queued))
-const silentPath = computed(() => path(points.value.silent))
+const silentOKPath = computed(() => path(points.value.silentOK))
+const silentFailPath = computed(() => path(points.value.silentFail))
 
 const baselineY = computed(() => points.value.yLeft(0))
 
@@ -148,7 +150,8 @@ const hoverTopY = computed(() => {
   return Math.min(
     points.value.yLeft(point.inflight),
     points.value.yLeft(point.queued),
-    points.value.yRight(point.silentTransfers),
+    points.value.yRight(point.silentSuccess),
+    points.value.yRight(point.silentFailed),
   )
 })
 
@@ -178,7 +181,8 @@ const hoverDots = computed(() => {
   return [
     { cls: 'modern-load-chart__dot--inflight', cx: hoverX.value, cy: points.value.yLeft(point.inflight) },
     { cls: 'modern-load-chart__dot--queued', cx: hoverX.value, cy: points.value.yLeft(point.queued) },
-    { cls: 'modern-load-chart__dot--silent', cx: hoverX.value, cy: points.value.yRight(point.silentTransfers) },
+    { cls: 'modern-load-chart__dot--silent-ok', cx: hoverX.value, cy: points.value.yRight(point.silentSuccess) },
+    { cls: 'modern-load-chart__dot--silent-fail', cx: hoverX.value, cy: points.value.yRight(point.silentFailed) },
   ]
 })
 
@@ -217,7 +221,8 @@ const gradientId = `load-history-fade-${Math.random().toString(36).slice(2, 8)}`
     <div class="modern-load-chart__legend">
       <span class="modern-load-chart__legend-item"><i class="modern-load-chart__swatch modern-load-chart__swatch--inflight" />{{ t('credentialLoad.chartInflight') }}</span>
       <span class="modern-load-chart__legend-item"><i class="modern-load-chart__swatch modern-load-chart__swatch--queued" />{{ t('credentialLoad.chartQueued') }}</span>
-      <span class="modern-load-chart__legend-item"><i class="modern-load-chart__swatch modern-load-chart__swatch--silent" />{{ t('credentialLoad.chartSilent') }}({{ t('credentialLoad.chartRightAxis') }})</span>
+      <span class="modern-load-chart__legend-item"><i class="modern-load-chart__swatch modern-load-chart__swatch--silent-ok" />{{ t('credentialLoad.chartSilentOK') }}({{ t('credentialLoad.chartRightAxis') }})</span>
+      <span class="modern-load-chart__legend-item"><i class="modern-load-chart__swatch modern-load-chart__swatch--silent-fail" />{{ t('credentialLoad.chartSilentFail') }}({{ t('credentialLoad.chartRightAxis') }})</span>
       <span class="modern-load-chart__legend-item"><i class="modern-load-chart__swatch modern-load-chart__swatch--capacity" />{{ t('credentialLoad.chartCapacityLine') }} {{ props.capacity }}</span>
     </div>
     <div class="modern-load-chart__plot">
@@ -250,7 +255,8 @@ const gradientId = `load-history-fade-${Math.random().toString(36).slice(2, 8)}`
         />
         <path v-if="inflightArea" :d="inflightArea" :fill="`url(#${gradientId})`" />
         <path v-if="queuedPath" :d="queuedPath" class="modern-load-chart__line modern-load-chart__line--queued" />
-        <path v-if="silentPath" :d="silentPath" class="modern-load-chart__line modern-load-chart__line--silent" />
+        <path v-if="silentOKPath" :d="silentOKPath" class="modern-load-chart__line modern-load-chart__line--silent-ok" />
+        <path v-if="silentFailPath" :d="silentFailPath" class="modern-load-chart__line modern-load-chart__line--silent-fail" />
         <path v-if="inflightPath" :d="inflightPath" class="modern-load-chart__line modern-load-chart__line--inflight" />
         <g v-if="hover">
           <line
@@ -290,10 +296,17 @@ const gradientId = `load-history-fade-${Math.random().toString(36).slice(2, 8)}`
           </span>
           <span class="modern-load-chart__tooltip-row">
             <span class="modern-load-chart__tooltip-key">
-              <i class="modern-load-chart__swatch modern-load-chart__swatch--silent" />
-              {{ t('credentialLoad.chartSilent') }}
+              <i class="modern-load-chart__swatch modern-load-chart__swatch--silent-ok" />
+              {{ t('credentialLoad.chartSilentOK') }}
             </span>
-            <strong class="modern-load-chart__tooltip-value">{{ hover.silentTransfers }}</strong>
+            <strong class="modern-load-chart__tooltip-value">{{ hover.silentSuccess }}</strong>
+          </span>
+          <span class="modern-load-chart__tooltip-row">
+            <span class="modern-load-chart__tooltip-key">
+              <i class="modern-load-chart__swatch modern-load-chart__swatch--silent-fail" />
+              {{ t('credentialLoad.chartSilentFail') }}
+            </span>
+            <strong class="modern-load-chart__tooltip-value">{{ hover.silentFailed }}</strong>
           </span>
         </div>
     </div>
@@ -333,7 +346,10 @@ const gradientId = `load-history-fade-${Math.random().toString(36).slice(2, 8)}`
 .modern-load-chart__swatch--queued {
   background: var(--modern-warning);
 }
-.modern-load-chart__swatch--silent {
+.modern-load-chart__swatch--silent-ok {
+  background: var(--modern-chart-cache);
+}
+.modern-load-chart__swatch--silent-fail {
   background: var(--modern-danger);
 }
 .modern-load-chart__swatch--capacity {
@@ -387,7 +403,10 @@ const gradientId = `load-history-fade-${Math.random().toString(36).slice(2, 8)}`
 .modern-load-chart__line--queued {
   stroke: var(--modern-warning);
 }
-.modern-load-chart__line--silent {
+.modern-load-chart__line--silent-ok {
+  stroke: var(--modern-chart-cache);
+}
+.modern-load-chart__line--silent-fail {
   stroke: var(--modern-danger);
   stroke-dasharray: 4 3;
 }
@@ -404,7 +423,10 @@ const gradientId = `load-history-fade-${Math.random().toString(36).slice(2, 8)}`
 .modern-load-chart__dot--queued {
   fill: var(--modern-warning);
 }
-.modern-load-chart__dot--silent {
+.modern-load-chart__dot--silent-ok {
+  fill: var(--modern-chart-cache);
+}
+.modern-load-chart__dot--silent-fail {
   fill: var(--modern-danger);
 }
 .modern-load-chart__tooltip {

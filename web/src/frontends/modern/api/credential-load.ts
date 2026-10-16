@@ -65,7 +65,8 @@ export interface CredentialLoadHistoryPoint {
   atMs: number
   inflight: number
   queued: number
-  silentTransfers: number
+  silentSuccess: number
+  silentFailed: number
 }
 
 export interface CredentialLoadReport {
@@ -186,7 +187,8 @@ export function readCredentialLoad(value: unknown): CredentialLoadReport {
         atMs: integer(point.at_ms),
         inflight: integer(point.inflight),
         queued: integer(point.queued),
-        silentTransfers: integer(point.silent_transfers),
+        silentSuccess: integer(point.silent_success),
+        silentFailed: integer(point.silent_failed),
       }
     }),
     localRejects: Object.fromEntries(

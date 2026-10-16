@@ -16,50 +16,62 @@ type LoadHistorySample struct {
 	AtMS     int64 `json:"at_ms"`
 	Inflight int64 `json:"inflight"`
 	Queued   int64 `json:"queued"`
-	// SilentTransfers 是该采样间隔内"无感转移"次数(换下一个凭证重试),
-	// 由网关在 AdvancePriority 处累计, 采样时取累计值差值。
-	SilentTransfers int64 `json:"silent_transfers"`
+	// 无感转移的两个结果口径(次/秒): 网关在请求结束时按
+	// "该请求内的转移次数 × 最终成败"结算, 采样取累计值差值。
+	// 转移后请求成功 → 成功数; 失败/被取消 → 失败数。
+	SilentSuccess int64 `json:"silent_success"`
+	SilentFailed  int64 `json:"silent_failed"`
 }
 
 type loadHistory struct {
-	mu      sync.Mutex
-	ring    [LoadHistoryCapacity]LoadHistorySample
-	written uint64
-	silent  atomic.Int64
-	last    int64
+	mu          sync.Mutex
+	ring        [LoadHistoryCapacity]LoadHistorySample
+	written     uint64
+	success     atomic.Int64
+	failed      atomic.Int64
+	lastSuccess int64
+	lastFailed  int64
 }
 
-// CountSilentTransfer 网关侧累计一次跨凭证无感转移。
-func (r *CredentialRegistry) CountSilentTransfer() {
+// CountSilentTransferOutcomes 网关在请求终态时结算其无感转移次数。
+func (r *CredentialRegistry) CountSilentTransferOutcomes(success, failed int64) {
 	if r == nil || r.loadHistory == nil {
 		return
 	}
-	r.loadHistory.silent.Add(1)
-}
-
-// SilentTransfers 返回累计无感转移次数。
-func (r *CredentialRegistry) SilentTransfers() int64 {
-	if r == nil || r.loadHistory == nil {
-		return 0
+	if success > 0 {
+		r.loadHistory.success.Add(success)
 	}
-	return r.loadHistory.silent.Load()
+	if failed > 0 {
+		r.loadHistory.failed.Add(failed)
+	}
 }
 
-// RecordLoadSample 追加一个采样点; silent 字段由本方法按累计值差值填写。
+// SilentTransferOutcomes 返回累计的(成功, 失败)转移次数, 供测试与诊断。
+func (r *CredentialRegistry) SilentTransferOutcomes() (int64, int64) {
+	if r == nil || r.loadHistory == nil {
+		return 0, 0
+	}
+	return r.loadHistory.success.Load(), r.loadHistory.failed.Load()
+}
+
+// RecordLoadSample 追加一个采样点; 两个转移字段按累计值差值填写。
 func (r *CredentialRegistry) RecordLoadSample(atMS int64, inflight, queued int64) {
 	if r == nil || r.loadHistory == nil {
 		return
 	}
 	h := r.loadHistory
-	total := h.silent.Load()
+	success := h.success.Load()
+	failed := h.failed.Load()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	index := int(h.written % LoadHistoryCapacity)
 	h.ring[index] = LoadHistorySample{
 		AtMS: atMS, Inflight: inflight, Queued: queued,
-		SilentTransfers: total - h.last,
+		SilentSuccess: success - h.lastSuccess,
+		SilentFailed:  failed - h.lastFailed,
 	}
-	h.last = total
+	h.lastSuccess = success
+	h.lastFailed = failed
 	h.written++
 }
 
