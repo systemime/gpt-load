@@ -192,7 +192,10 @@ func providerConfig(baseURL string, custom bool, baseProvider schemas.ModelProvi
 			DefaultRequestTimeoutInSeconds: providerTimeoutSecs,
 			MaxRetries:                     0,
 			StreamIdleTimeoutInSeconds:     120,
-			AllowPrivateNetwork:            allowPrivateNetwork,
+			// 出口线路丢包场景下, 空闲连接过早回收意味着更多 TCP 握手暴露在丢包里。
+			// 拉长池化保温; 若上游 LB 空闲超时更短, 会以 reset/broken pipe 形式暴露, 届时下调。
+			KeepAliveTimeoutInSeconds: 90,
+			AllowPrivateNetwork:        allowPrivateNetwork,
 		},
 		ConcurrencyAndBufferSize: schemas.ConcurrencyAndBufferSize{
 			Concurrency: providerConcurrency,
