@@ -263,6 +263,7 @@ export default {
         downstream_cancel: 'ダウンストリームでキャンセル',
         authentication_required: '再認証が必要',
         ambiguous: '不明確な失敗',
+        cooldown: 'クールダウン中（失敗原因は直近の記録外）',
       },
       accessKeyLimits: {
         title: 'アクセスキー費用上限',

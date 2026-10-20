@@ -500,7 +500,7 @@ func TestRestoreTestedGroupCredentialRequiresMatchingProofAndRestoresAtomically(
 		t.Fatal(err)
 	}
 	if after[0].Blacklisted || after[0].FailureCount != 0 ||
-		fixture.stats.Snapshot(credential.ID, observedAt) != (health.CredentialStats{Failure: 1, Problem: 1}) {
+		fixture.stats.Snapshot(credential.ID, observedAt) != (health.CredentialStats{Failure: 1, Problem: 1, LastFailureCategory: health.FailureCategoryOK}) {
 		t.Fatalf("restore state = %#v stats=%#v", after[0], fixture.stats.Snapshot(credential.ID, observedAt))
 	}
 }

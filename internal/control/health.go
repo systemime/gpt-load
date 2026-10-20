@@ -369,16 +369,23 @@ func (service *Service) RuntimeHealth() (runtimeHealthResponse, error) {
 		stats := service.stats.Snapshot(key.ID, observation.observedAt)
 		lastFailureCategory := stats.LastFailureCategory
 		lastStatusCode := stats.LastStatusCode
+		failureCategoryLabel := lastFailureCategory.String()
 		if lastFailureCategory == health.FailureCategoryOK {
-			lastFailureCategory = health.FailureCategoryAmbiguous
+			// 无失败信息时不展示"未明确归类"。冷却桶给专用标签(前端文案
+			// 为"账号冷却中"), 黑名单桶维持 ambiguous 兜底。
 			lastStatusCode = 0
+			if bucket == healthBucketCooldown {
+				failureCategoryLabel = "cooldown"
+			} else {
+				failureCategoryLabel = health.FailureCategoryAmbiguous.String()
+			}
 		}
 		detail := healthProblemCredentialResponse{
 			CredentialID:            key.ID,
 			GroupID:                 key.GroupID,
 			GroupName:               group.Name,
 			Identity:                identity,
-			LastFailureCategory:     lastFailureCategory.String(),
+			LastFailureCategory:     failureCategoryLabel,
 			LastFailureSummary:      stats.LastFailureSummary,
 			LastStatusCode:          optionalHealthStatusCode(lastStatusCode),
 			FailureCount:            key.FailureCount,

@@ -131,7 +131,9 @@ func (store *StatsStore) record(
 	if event == statsEventSuccess {
 		window.consecutiveFailure = 0
 		window.consecutiveProblem = 0
-		window.lastFailureCategory = FailureCategoryAmbiguous
+		// 成功只清零计数, 不把失败类别抹成 ambiguous——ambiguous 是真实
+		// 分类, 借作"无失败"哨兵会把冷却原因(如 429 配额)盖成"未明确归类"。
+		window.lastFailureCategory = FailureCategoryOK
 		window.lastStatusCode = 0
 		window.lastFailureSummary = ""
 		return
@@ -167,7 +169,7 @@ func (store *StatsStore) ClearProblemState(credentialID uint) {
 	}
 	window.consecutiveFailure = 0
 	window.consecutiveProblem = 0
-	window.lastFailureCategory = FailureCategoryAmbiguous
+	window.lastFailureCategory = FailureCategoryOK
 	window.lastStatusCode = 0
 	window.lastFailureSummary = ""
 }

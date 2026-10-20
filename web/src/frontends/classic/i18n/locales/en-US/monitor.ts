@@ -263,6 +263,7 @@ export default {
         downstream_cancel: 'Downstream canceled',
         authentication_required: 'Authentication required',
         ambiguous: 'Ambiguous failure',
+        cooldown: 'Account cooling down (failure reason outside recent window)',
       },
       accessKeyLimits: {
         title: 'Access key cost limits',

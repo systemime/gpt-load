@@ -259,6 +259,7 @@ export default {
         downstream_cancel: '下游已取消',
         authentication_required: '需要重新认证',
         ambiguous: '结果不明确',
+        cooldown: '账号冷却中（失败原因已不在近期记录）',
       },
       accessKeyLimits: {
         title: '访问密钥费用限额',

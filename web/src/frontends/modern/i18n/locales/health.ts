@@ -58,6 +58,7 @@ export const zhCN = {
     downstream_cancel: '客户端取消',
     authentication_required: '需要重新授权',
     ambiguous: '未明确归类的异常',
+    cooldown: '账号冷却中（失败原因已不在近期记录）',
   },
   impacts: {
     group: '该分组无法承接请求',
@@ -172,6 +173,7 @@ export const enUS = {
     downstream_cancel: 'Client canceled',
     authentication_required: 'Authorization required',
     ambiguous: 'Unclassified error',
+    cooldown: 'Account cooling down (failure reason outside recent window)',
   },
   impacts: {
     group: 'This group cannot accept requests',
@@ -286,6 +288,7 @@ export const jaJP = {
     downstream_cancel: 'クライアントがキャンセル',
     authentication_required: '再認証が必要',
     ambiguous: '未分類のエラー',
+    cooldown: 'クールダウン中（失敗原因は直近の記録外）',
   },
   impacts: {
     group: 'このグループはリクエストを受け付けられません',

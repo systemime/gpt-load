@@ -81,7 +81,7 @@ func TestBatchRestoreAllCredentialsPreservesConfigurationAndHistory(t *testing.T
 		}
 		stats := fixture.stats.Snapshot(before.ID, now)
 		if stats.Success != 1 || stats.Failure != 1 || stats.ConsecutiveFailure != 0 ||
-			stats.ConsecutiveProblem != 0 || stats.LastStatusCode != 0 || stats.LastFailureCategory != health.FailureCategoryAmbiguous {
+			stats.ConsecutiveProblem != 0 || stats.LastStatusCode != 0 || stats.LastFailureCategory != health.FailureCategoryOK {
 			t.Fatalf("credential %d history = %#v", before.ID, stats)
 		}
 		want := before
