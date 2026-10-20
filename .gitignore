@@ -65,3 +65,4 @@ internal/webui/dist/*
 internal/webui/dist/assets/*
 !internal/webui/dist/assets/embed-placeholder.txt
 internal/graphify-out/
+/graphify-out/
