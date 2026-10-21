@@ -253,6 +253,7 @@ func (a *App) Start() error {
 		logrus.WithField("event", "startup.control_runtime_start").Info("control runtime started")
 		a.controlRuntime.Run(runtimeContext)
 	}()
+	go a.runCheckpointSaver(runtimeContext)
 
 	logrus.WithFields(logrus.Fields{
 		"event":   "startup.ready",
@@ -275,6 +276,32 @@ func (a *App) Address() string {
 		return ""
 	}
 	return a.listener.Addr().String()
+}
+
+// runtimeCheckpointInterval 是运行期检查点落盘周期。变量而非常量以便测试缩短。
+var runtimeCheckpointInterval = 30 * time.Second
+
+// runCheckpointSaver 周期性落盘运行时检查点。蓝绿切换用 SIGKILL 停止退役槽
+// (避免 SQLite WAL 被干净关闭抽走), 优雅关闭路径的 Save 永远不会执行, 若没有
+// 运行期兜底, 每次部署冷却/黑名单/健康统计都会清零。
+func (a *App) runCheckpointSaver(ctx context.Context) {
+	if a.runtimeCheckpoint == nil {
+		return
+	}
+	ticker := time.NewTicker(runtimeCheckpointInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := a.runtimeCheckpoint.Save(ctx); err != nil {
+				logrus.WithError(err).WithField("event", "runtime.checkpoint_periodic_save").Warn(
+					"periodic runtime state checkpoint save failed",
+				)
+			}
+		}
+	}
 }
 
 // Stop cancels active work, drains local state, and closes infrastructure.
