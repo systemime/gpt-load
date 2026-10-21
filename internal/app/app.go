@@ -181,12 +181,9 @@ func (a *App) Start() error {
 		return a.startupFailure("runtime_state", fmt.Errorf("load runtime state: %w", err))
 	}
 	logrus.WithField("event", "startup.runtime_state_loaded").Info("runtime state loaded")
-	if a.startupRecovery != nil {
-		if err := a.startupRecovery.DrainCommittedOperations(context.Background()); err != nil {
-			return a.startupFailure("recovery", fmt.Errorf("recover committed control operations: %w", err))
-		}
-		logrus.WithField("event", "startup.operation_recovery").Info("committed control operations recovered")
-	}
+	// 检查点恢复必须在 DrainCommittedOperations 之前: 后者的冷却重放只延长
+	// 不缩短, 需要检查点里较新的状态已就位, 否则旧进程检查点(可能落后或为
+	// 零值)会在回放之后把状态盖掉。
 	if a.runtimeCheckpoint != nil {
 		if err := a.runtimeCheckpoint.Restore(context.Background()); err != nil {
 			logrus.WithError(err).WithField("event", "startup.checkpoint_restore").Warn(
@@ -195,6 +192,12 @@ func (a *App) Start() error {
 		} else {
 			logrus.WithField("event", "startup.checkpoint_restore").Info("runtime state checkpoint checked")
 		}
+	}
+	if a.startupRecovery != nil {
+		if err := a.startupRecovery.DrainCommittedOperations(context.Background()); err != nil {
+			return a.startupFailure("recovery", fmt.Errorf("recover committed control operations: %w", err))
+		}
+		logrus.WithField("event", "startup.operation_recovery").Info("committed control operations recovered")
 	}
 	if a.executionRuntime != nil {
 		if err := a.executionRuntime.Start(context.Background()); err != nil {

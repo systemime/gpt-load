@@ -51,7 +51,9 @@ func (fake runtimeCheckpointFake) Save(ctx context.Context) error {
 	return fake.save(ctx)
 }
 
-func TestAppRestoresCheckpointAfterRuntimeRecovery(t *testing.T) {
+// 检查点必须先于 DrainCommittedOperations 恢复: 后者会从请求记录回放冷却,
+// 回放只延长不缩短, 需要检查点的较新状态先就位, 否则会被旧检查点覆盖。
+func TestAppRestoresCheckpointBeforeRuntimeRecovery(t *testing.T) {
 	db, err := storage.Open(":memory:")
 	if err != nil {
 		t.Fatalf("storage.Open() error = %v", err)
@@ -88,7 +90,7 @@ func TestAppRestoresCheckpointAfterRuntimeRecovery(t *testing.T) {
 	if err := application.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	if want := []string{"bootstrap", "runtime", "recovery", "checkpoint"}; !slices.Equal(order, want) {
+	if want := []string{"bootstrap", "runtime", "checkpoint", "recovery"}; !slices.Equal(order, want) {
 		t.Fatalf("startup order = %#v, want %#v", order, want)
 	}
 }
