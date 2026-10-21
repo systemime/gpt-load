@@ -40,7 +40,72 @@ func (s *Service) DrainCommittedOperations(ctx context.Context) error {
 	if _, err := s.recoverPendingOperationsLocked(ctx, 0); err != nil {
 		return err
 	}
-	return s.restoreCredentialQuotaObservations(ctx)
+	if err := s.restoreCredentialQuotaObservations(ctx); err != nil {
+		return err
+	}
+	return s.restoreRuntimeCooldowns(ctx)
+}
+
+// restoreRuntimeCooldowns 按每个凭证最近一条冷却/拉黑类尝试重建调度状态。
+// 蓝绿切换用 SIGKILL, 运行期检查点可能整体缺失或落后 30s; 不回放的话
+// 额度耗尽的凭证会全部回到可调度状态并再次撞限流。
+// 运行在检查点恢复之前, 较新的检查点会覆盖这里的回放结果。
+func (s *Service) restoreRuntimeCooldowns(ctx context.Context) error {
+	if s.registry == nil {
+		return nil
+	}
+	actions := []string{"cooldown_credential", "fail_credential"}
+	latest := s.db.WithContext(ctx).
+		Model(&models.RequestLogAttempt{}).
+		Select("credential_id, MAX(completed_at_ms) AS completed_at_ms").
+		Where("action IN ?", actions).
+		Group("credential_id")
+	var rows []struct {
+		CredentialID    uint
+		Action          string
+		CooldownUntilMS *int64
+		CompletedAtMS   int64
+	}
+	err := s.db.WithContext(ctx).
+		Model(&models.RequestLogAttempt{}).
+		Select("request_log_attempts.credential_id, request_log_attempts.action, request_log_attempts.cooldown_until_ms, request_log_attempts.completed_at_ms").
+		Joins("JOIN (?) AS latest ON latest.credential_id = request_log_attempts.credential_id AND latest.completed_at_ms = request_log_attempts.completed_at_ms", latest).
+		Where("action IN ?", actions).
+		Scan(&rows).Error
+	if err != nil {
+		return app_errors.ParseDBError(err)
+	}
+	now := s.now().UTC()
+	// 拉黑没有截止时间, 用时间窗限制回放范围, 避免把早已人工解封的历史拉黑重新套上。
+	failCutoffMS := now.Add(-7 * 24 * time.Hour).UnixMilli()
+	applied := 0
+	for _, row := range rows {
+		if row.Action == "fail_credential" {
+			if row.CompletedAtMS < failCutoffMS {
+				continue
+			}
+			if s.registry.SetBlacklisted(row.CredentialID) {
+				applied++
+			}
+			continue
+		}
+		if row.CooldownUntilMS == nil {
+			continue
+		}
+		until := time.UnixMilli(*row.CooldownUntilMS).UTC()
+		if !until.After(now) {
+			continue
+		}
+		if s.registry.SetCooldown(row.CredentialID, until) {
+			applied++
+		}
+	}
+	if applied > 0 {
+		logrus.WithField("event", "startup.runtime_health_replayed").
+			WithField("count", applied).
+			Info("runtime cooldown/blacklist restored from request attempts")
+	}
+	return nil
 }
 
 func (s *Service) recoverPendingOperationsLocked(

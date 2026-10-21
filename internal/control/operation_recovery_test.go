@@ -503,3 +503,64 @@ func assertRecoveryPendingDataShape(t *testing.T, err error) {
 		t.Fatalf("recovery data fields = %v, want exact frozen shape", fields)
 	}
 }
+
+// 部署用 SIGKILL 停旧槽, 运行期检查点可能缺失; 启动时必须按每个凭证
+// 最近一条冷却/拉黑尝试重建调度状态, 否则额度耗尽的凭证会全部回到可用。
+func TestRestoreRuntimeCooldownsReplaysLatestAttempt(t *testing.T) {
+	t.Parallel()
+	fixture := newServiceFixture(t)
+	now := fixture.service.now().UTC()
+	if err := fixture.registry.ReplaceCredentials([]state.CredentialEntry{
+		{ID: 7, GroupID: 1, Version: 1, IdentityGeneration: 7, Fingerprint: "seed-7", Status: state.CredentialStatusActive, EncryptedValue: "v7"},
+		{ID: 10, GroupID: 1, Version: 1, IdentityGeneration: 10, Fingerprint: "seed-10", Status: state.CredentialStatusActive, EncryptedValue: "v10"},
+		{ID: 11, GroupID: 1, Version: 1, IdentityGeneration: 11, Fingerprint: "seed-11", Status: state.CredentialStatusActive, EncryptedValue: "v11"},
+	}); err != nil {
+		t.Fatalf("ReplaceCredentials() error = %v", err)
+	}
+	until := now.Add(time.Hour).UnixMilli()
+	expired := now.Add(-time.Hour).UnixMilli()
+	insertAttempt := func(id string, cred uint, action, effect, category string, untilMS *int64, at time.Time) {
+		t.Helper()
+		request := models.RequestLog{
+			ID: id, CompletedAtMS: at.UnixMilli(), AccessKeyID: 1,
+			Protocol: "openai-completions", ClientModel: "model", UpstreamModel: "model",
+			ModelConsistency: "not_applicable", Status: "error", StatusCode: 429, DurationMs: 1,
+			UsageState: "not_applicable", CostState: "not_applicable", PricingCompleteness: "not_applicable",
+		}
+		if err := fixture.service.db.Omit(
+			"RequestAudit", "AuditCostNanoUSD", "AuditPricingCompleteness", "AffinityKind", "AutoDecision", "DecisionModel", "DecisionCostNanoUSD",
+			"DecisionPricingCompleteness", "DecisionGroupID", "DecisionChannelID", "DecisionCredentialID", "ClientIP",
+		).Create(&request).Error; err != nil {
+			t.Fatalf("create request log: %v", err)
+		}
+		attempt := models.RequestLogAttempt{
+			RequestID: id, Sequence: 1, GroupID: 1, CredentialID: cred,
+			CompletedAtMS: at.UnixMilli(), FailureCategory: category,
+			Action: action, Effect: effect, ErrorSummary: "已超出使用上限",
+			StatusCode: 429, CooldownUntilMS: untilMS,
+		}
+		if err := fixture.service.db.Create(&attempt).Error; err != nil {
+			t.Fatalf("create attempt: %v", err)
+		}
+	}
+	insertAttempt("00000000-0000-4000-8000-000000000007", 7, "cooldown_credential", "cooldown_credential", "rate_limited", &until, now.Add(-time.Minute))
+	insertAttempt("00000000-0000-4000-8000-000000000010", 10, "cooldown_credential", "cooldown_credential", "rate_limited", &expired, now.Add(-time.Hour))
+	insertAttempt("00000000-0000-4000-8000-000000000011", 11, "fail_credential", "record_credential_failure", "invalid_key", nil, now.Add(-time.Minute))
+
+	if err := fixture.service.restoreRuntimeCooldowns(t.Context()); err != nil {
+		t.Fatalf("restoreRuntimeCooldowns() error = %v", err)
+	}
+	entries, err := fixture.registry.SnapshotGroupCredentialEntriesExact(1, []uint{7, 10, 11})
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+	if got := entries[0].CooldownUntil.UnixMilli(); got != until {
+		t.Fatalf("credential 7 cooldown = %d, want %d", got, until)
+	}
+	if !entries[1].CooldownUntil.IsZero() {
+		t.Fatalf("credential 10 expired cooldown was replayed: %v", entries[1].CooldownUntil)
+	}
+	if !entries[2].Blacklisted {
+		t.Fatal("credential 11 blacklist not replayed")
+	}
+}
