@@ -131,11 +131,10 @@ func (store *StatsStore) record(
 	if event == statsEventSuccess {
 		window.consecutiveFailure = 0
 		window.consecutiveProblem = 0
-		// 成功只清零计数, 不把失败类别抹成 ambiguous——ambiguous 是真实
-		// 分类, 借作"无失败"哨兵会把冷却原因(如 429 配额)盖成"未明确归类"。
-		window.lastFailureCategory = FailureCategoryOK
-		window.lastStatusCode = 0
-		window.lastFailureSummary = ""
+		// 成功只清零连击计数, 保留最近一次失败的原因: 冷却生效后仍会有
+		// 在途请求成功落库, 若在此清空类别/文案, 冷却展示就会丢失真实
+		// 原因(429 配额原文)退化成"未明确归类"。该字段只用于冷却/黑名单
+		// 条目展示, 健康凭证不渲染, 保留无副作用。
 		return
 	}
 	if event == statsEventFailure {

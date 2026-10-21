@@ -49,7 +49,7 @@ func TestStatsStoreRecordAggregatesRollingWindow(t *testing.T) {
 	store.RecordFailure(1, FailureCategoryAmbiguous, 0, "", base.Add(-5*time.Minute))
 
 	got := store.Snapshot(1, base)
-	want := CredentialStats{Success: 2, Failure: 1, Problem: 1, LastFailureCategory: FailureCategoryOK}
+	want := CredentialStats{Success: 2, Failure: 1, Problem: 1}
 	if got != want {
 		t.Fatalf("Snapshot() = %#v, want %#v", got, want)
 	}
@@ -64,7 +64,7 @@ func TestStatsStoreRecordDiscardsOlderSlotCollision(t *testing.T) {
 		store.RecordSuccess(1, base.Add(5*time.Minute))
 
 		got := store.Snapshot(1, base.Add(5*time.Minute))
-		want := CredentialStats{Success: 1, LastFailureCategory: FailureCategoryOK}
+		want := CredentialStats{Success: 1}
 		if got != want {
 			t.Fatalf("Snapshot() = %#v, want %#v", got, want)
 		}
@@ -91,7 +91,7 @@ func TestStatsStoreSnapshotExcludesExpiredAndFutureBuckets(t *testing.T) {
 	store.RecordSuccess(1, base.Add(time.Minute))
 
 	got := store.Snapshot(1, base)
-	want := CredentialStats{ConsecutiveFailure: 0, LastFailureCategory: FailureCategoryOK}
+	want := CredentialStats{ConsecutiveFailure: 0}
 	if got != want {
 		t.Fatalf("Snapshot() = %#v, want %#v", got, want)
 	}
@@ -110,7 +110,7 @@ func TestStatsStoreConsecutiveFailureLifecycle(t *testing.T) {
 	}
 
 	store.RecordSuccess(1, base)
-	if got, want := store.Snapshot(1, base), (CredentialStats{Success: 1, Failure: 1, Problem: 1, LastFailureCategory: FailureCategoryOK}); got != want {
+	if got, want := store.Snapshot(1, base), (CredentialStats{Success: 1, Failure: 1, Problem: 1}); got != want {
 		t.Fatalf("after success Snapshot() = %#v, want %#v", got, want)
 	}
 }
@@ -146,7 +146,8 @@ func TestStatsStoreProblemContextLifecycle(t *testing.T) {
 		Success:             1,
 		Failure:             1,
 		Problem:             2,
-		LastFailureCategory: FailureCategoryOK,
+		LastFailureCategory: FailureCategoryInvalidKey,
+		LastStatusCode:      401,
 	}); got != want {
 		t.Fatalf("after success Snapshot() = %#v, want %#v", got, want)
 	}
@@ -180,7 +181,7 @@ func TestStatsStoreSnapshotReturnsValueCopy(t *testing.T) {
 
 	snapshot := store.Snapshot(1, base)
 	snapshot.Success = 99
-	if got, want := store.Snapshot(1, base), (CredentialStats{Success: 1, LastFailureCategory: FailureCategoryOK}); got != want {
+	if got, want := store.Snapshot(1, base), (CredentialStats{Success: 1}); got != want {
 		t.Fatalf("Snapshot() after mutating prior result = %#v, want %#v", got, want)
 	}
 }

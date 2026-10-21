@@ -370,9 +370,12 @@ func (service *Service) RuntimeHealth() (runtimeHealthResponse, error) {
 		lastFailureCategory := stats.LastFailureCategory
 		lastStatusCode := stats.LastStatusCode
 		failureCategoryLabel := lastFailureCategory.String()
-		if lastFailureCategory == health.FailureCategoryOK {
-			// 无失败信息时不展示"未明确归类"。冷却桶给专用标签(前端文案
-			// 为"账号冷却中"), 黑名单桶维持 ambiguous 兜底。
+		// 无失败信息时不展示"未明确归类": 冷却桶给专用标签(前端文案为
+		// "账号冷却中"), 黑名单桶维持 ambiguous 兜底。OK 来自清理动作;
+		// ambiguous 且无文案来自进程重启后统计重建(冷却状态仍在库里)。
+		noFailureInfo := lastFailureCategory == health.FailureCategoryOK ||
+			(lastFailureCategory == health.FailureCategoryAmbiguous && stats.LastFailureSummary == "")
+		if noFailureInfo {
 			lastStatusCode = 0
 			if bucket == healthBucketCooldown {
 				failureCategoryLabel = "cooldown"
