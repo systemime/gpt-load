@@ -346,19 +346,21 @@ func (service *Service) credentialNames(c *gin.Context) (map[uint]string, error)
 
 // credentialLoadWindowSums 是 credential_id / access_key_id / group_id 三个维度共用的
 // 窗口聚合表达式; 占位符顺序为 1h×6, 5h×6, 24h×6, 与 credentialLoadWindowArgs 一一对应。
-const credentialLoadWindowSums = `SUM(CASE WHEN completed_at_ms > ? THEN 1 ELSE 0 END) AS requests_1h,
+// 客户端主动取消(client_canceled)不代表上游或调度质量, 不计入请求数(成功率分母),
+// 与 gpt-load-watch 脚本的口径差异仅此一项。
+const credentialLoadWindowSums = `SUM(CASE WHEN completed_at_ms > ? AND COALESCE(error_code, '') != 'client_canceled' THEN 1 ELSE 0 END) AS requests_1h,
 SUM(CASE WHEN completed_at_ms > ? AND status = 'success' THEN 1 ELSE 0 END) AS success_1h,
 SUM(CASE WHEN completed_at_ms > ? AND affinity_hit THEN 1 ELSE 0 END) AS affinity_1h,
 SUM(CASE WHEN completed_at_ms > ? THEN uncached_input_tokens ELSE 0 END) AS uncached_1h,
 SUM(CASE WHEN completed_at_ms > ? THEN output_tokens ELSE 0 END) AS output_1h,
 SUM(CASE WHEN completed_at_ms > ? THEN cache_read_tokens ELSE 0 END) AS cache_read_1h,
-SUM(CASE WHEN completed_at_ms > ? THEN 1 ELSE 0 END) AS requests_5h,
+SUM(CASE WHEN completed_at_ms > ? AND COALESCE(error_code, '') != 'client_canceled' THEN 1 ELSE 0 END) AS requests_5h,
 SUM(CASE WHEN completed_at_ms > ? AND status = 'success' THEN 1 ELSE 0 END) AS success_5h,
 SUM(CASE WHEN completed_at_ms > ? AND affinity_hit THEN 1 ELSE 0 END) AS affinity_5h,
 SUM(CASE WHEN completed_at_ms > ? THEN uncached_input_tokens ELSE 0 END) AS uncached_5h,
 SUM(CASE WHEN completed_at_ms > ? THEN output_tokens ELSE 0 END) AS output_5h,
 SUM(CASE WHEN completed_at_ms > ? THEN cache_read_tokens ELSE 0 END) AS cache_read_5h,
-SUM(CASE WHEN completed_at_ms > ? THEN 1 ELSE 0 END) AS requests_24h,
+SUM(CASE WHEN completed_at_ms > ? AND COALESCE(error_code, '') != 'client_canceled' THEN 1 ELSE 0 END) AS requests_24h,
 SUM(CASE WHEN completed_at_ms > ? AND status = 'success' THEN 1 ELSE 0 END) AS success_24h,
 SUM(CASE WHEN completed_at_ms > ? AND affinity_hit THEN 1 ELSE 0 END) AS affinity_24h,
 SUM(CASE WHEN completed_at_ms > ? THEN uncached_input_tokens ELSE 0 END) AS uncached_24h,

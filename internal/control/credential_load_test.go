@@ -48,6 +48,9 @@ func seedCredentialLoadRows(t *testing.T, fixture serviceFixture) {
 		// 本地拒绝 (未达上游)
 		{ID: "req-4", CredentialID: 0, GroupID: 0, CompletedAtMS: now - 60_000, Status: "error",
 			ErrorCode: "no_available_candidate"},
+		// 客户端取消: 不计入请求数(成功率分母), 但 token 照常累计
+		{ID: "req-5", CredentialID: 1, GroupID: 1, AccessKeyID: 7, CompletedAtMS: now - 30_000, Status: "error",
+			ErrorCode: "client_canceled", UncachedInputTokens: 50},
 	}
 	for index := range logs {
 		if err := fixture.db.Create(&logs[index]).Error; err != nil {
@@ -133,7 +136,10 @@ func TestCredentialLoadEndpointAggregatesWindowsErrorsAndInflight(t *testing.T) 
 		t.Fatalf("credential 1 1h window = %#v", first.Windows["1h"])
 	}
 	if first.Windows["24h"].Requests != 2 {
-		t.Fatalf("credential 1 24h requests = %d, want 2", first.Windows["24h"].Requests)
+		t.Fatalf("credential 1 24h requests = %d, want 2 (client_canceled excluded)", first.Windows["24h"].Requests)
+	}
+	if first.Windows["1h"].UncachedInputTokens != 150 {
+		t.Fatalf("credential 1 1h uncached tokens = %d, want 150 (canceled tokens still counted)", first.Windows["1h"].UncachedInputTokens)
 	}
 	if first.Errors5h.Connect != 0 {
 		t.Fatalf("credential 1 connect errors(5h) = %d, want 0 (row is 6h old)", first.Errors5h.Connect)
@@ -175,6 +181,7 @@ func TestCredentialLoadEndpointAggregatesWindowsErrorsAndInflight(t *testing.T) 
 		t.Fatalf("group item = %#v, want id 1 name load-test-group", groupItem)
 	}
 	if groupItem.Windows["1h"].Requests != 1 || groupItem.Windows["24h"].Requests != 3 {
+		// req-1 + req-3 + req-2 = 3; req-5(client_canceled) 与 req-4(dim_id=0) 不计入
 		t.Fatalf("group 1 windows = %#v", groupItem.Windows)
 	}
 }
