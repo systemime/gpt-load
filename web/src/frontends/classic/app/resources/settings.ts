@@ -1,4 +1,5 @@
 import { codexLiveModes, type CodexLiveMode } from '@shared/codex-live'
+import { readErrorRules, type ErrorRule } from '@shared/error-rules'
 import { readRedactionRules, type RedactionRule } from './request-redaction'
 import {
   readJev,
@@ -44,6 +45,7 @@ import {
 export const glmCodingPlans = ['standard', 'premium'] as const
 
 export const runtimeSettingKeys = [
+  'error_rules',
   'global_concurrency_limit',
   'default_access_key_concurrency_limit',
   'default_group_concurrency_limit',
@@ -80,6 +82,7 @@ export const runtimeSettingKeys = [
 export type RuntimeSettingKey = (typeof runtimeSettingKeys)[number]
 export type TimeoutSettingKey = Exclude<
   RuntimeSettingKey,
+  | 'error_rules'
   | 'codex_live_mode'
   | 'route_strategy'
   | 'global_concurrency_limit'
@@ -124,6 +127,7 @@ export interface CORSConfigDto {
 }
 
 export interface SettingsValues {
+  error_rules: ErrorRule[]
   request_redaction: RedactionRule[]
   jev: JevConfig
   request_audit: AuditConfig
@@ -170,6 +174,7 @@ export interface SettingsDto {
 }
 
 export type SettingsPatch = Partial<{
+  error_rules: ErrorRule[] | null
   auto_model: AutoModelConfigDto | null
   jev: JevConfig | null
   request_redaction: RedactionRule[] | null
@@ -302,6 +307,7 @@ export function projectSettings(value: unknown): SettingsDto {
     audit_access_keys: readAuditAccessKeys(record.audit_access_keys),
     request_audit_preset: readAudit(record.request_audit_preset),
     values: {
+      error_rules: readErrorRules(values.error_rules ?? []),
       auto_model: projectAutoModel(values.auto_model),
       jev: readJev(values.jev),
       request_audit: readAudit(values.request_audit),

@@ -628,6 +628,9 @@ export function projectCredentialItem(value: unknown): CredentialItemDto {
     recent_failure_count: projectSafeInteger(record.recent_failure_count, { minimum: 0 }),
     consecutive_failure_count: projectSafeInteger(record.consecutive_failure_count, { minimum: 0 }),
     last_failure_category: projectEnum(record.last_failure_category, failureCategories),
+    ...(record.last_failure_summary === undefined
+      ? {}
+      : { last_failure_summary: projectString(record.last_failure_summary) }),
     last_status_code:
       record.last_status_code === null
         ? null

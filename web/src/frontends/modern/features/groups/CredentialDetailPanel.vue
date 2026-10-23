@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { useMobileLayout } from '@modern/app/use-mobile-layout'
 import CredentialDisplay from '@modern/components/CredentialDisplay.vue'
 import { Info } from '@lucide/vue'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { computed, onScopeDispose, ref, watch } from 'vue'
+import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
 import { useMessageSource } from '@modern/app/messages'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -18,9 +19,10 @@ import {
   AppBadge,
   AppButton,
   AppCollectionState,
+  AppFormSection,
   AppIcon,
   AppOverflowText,
-  AppSegmentedField,
+  AppSegmentedControl,
   AppTextField,
   AppTooltip,
 } from '@modern/components/ui'
@@ -34,6 +36,9 @@ import CredentialTrends from './CredentialTrends.vue'
 import RPMTrend from '../rpm/RPMTrend.vue'
 import CredentialWindowUsage from './CredentialWindowUsage.vue'
 
+const isMobile = useMobileLayout()
+const mobileSection = ref('runtime')
+const settingsSection = ref<HTMLElement>()
 const props = defineProps<{ group: GroupRow; row: CredentialRow; channel?: GroupChannel }>()
 const emit = defineEmits<{ close: []; saved: [row: CredentialRow] }>()
 const { t, n, locale, te } = useI18n()
@@ -110,12 +115,13 @@ const proxyInvalid = computed(
     !validProxySelection(proxyID.value.trim()),
 )
 const proxyOptions = computed(() => [
-  { value: 'inherit', label: t('credentialCards.proxyMode.inherit') },
+  { value: 'inherit', label: t('groupCreate.proxyInherit') },
   { value: 'direct', label: t('groupCreate.proxyDirect') },
-  { value: 'custom', label: t('proxies.select') },
+  { value: 'custom', label: t('settingsForm.proxy.custom') },
 ])
 function failure(): string {
-  if (!item.value.failures) return '—'
+  if (item.value.failureSummary) return item.value.failureSummary
+  if (item.value.lastStatusCode === null && item.value.failureCategory === 'ambiguous') return '—'
   const key = 'credentialCards.failures.' + item.value.failureCategory
   // 分类枚举说不清时补上上游原文, 例如额度耗尽的具体恢复时间。
   return [
@@ -129,7 +135,16 @@ function failure(): string {
 async function save(): Promise<void> {
   if (!saved.value || !dirty.value || saving.value) return
   attempted.value = true
-  if (weightInvalid.value || capInvalid.value || proxyInvalid.value) return
+  if (weightInvalid.value || capInvalid.value || proxyInvalid.value) {
+    if (isMobile.value) {
+      mobileSection.value = 'settings'
+      await nextTick()
+      const invalid = settingsSection.value?.querySelector<HTMLElement>('[aria-invalid="true"]')
+      invalid?.focus({ preventScroll: true })
+      invalid?.scrollIntoView({ block: 'center' })
+    }
+    return
+  }
   const patch: Parameters<typeof updateCredential>[3] = {}
   if (weight.value !== String(saved.value.weightManual ?? ''))
     patch.weight_manual = weight.value ? Number(weight.value) : null
@@ -205,6 +220,18 @@ useMessageSource(() =>
     @close="emit('close')"
     @save="save"
   >
+    <template v-if="isMobile" #toolbar
+      ><div class="modern-credential-mobile-toolbar">
+        <AppSegmentedControl
+          v-model="mobileSection"
+          :label="t('groupDetail.credentialDetails')"
+          :options="[
+            { value: 'runtime', label: t('credentialCards.runtime') },
+            { value: 'usage', label: t('credentialCards.trends') },
+            { value: 'settings', label: t('credentialCards.settings') },
+          ]"
+        /></div
+    ></template>
     <AppCollectionState v-if="query.isPending.value" :title="t('collection.loading')" loading />
     <AppCollectionState
       v-else-if="query.isError.value && !saved"
@@ -226,6 +253,7 @@ useMessageSource(() =>
         @pending="namePending = $event"
       />
       <CredentialTrends
+        v-show="!isMobile || mobileSection === 'usage'"
         :subscription="group.connectionType === 'subscription'"
         :group="group.id"
         :credential="row.id"
@@ -233,10 +261,17 @@ useMessageSource(() =>
       />
       <CredentialWindowUsage
         v-if="item.observation?.windows.length"
+        v-show="!isMobile || mobileSection === 'usage'"
         :windows="item.observation.windows"
       />
-      <RPMTrend :scope="{ kind: 'credential', id: row.id, group: group.id }" />
-      <section class="modern-credential-detail-section">
+      <RPMTrend
+        v-show="!isMobile || mobileSection === 'usage'"
+        :scope="{ kind: 'credential', id: row.id, group: group.id }"
+      />
+      <section
+        v-show="!isMobile || mobileSection === 'runtime'"
+        class="modern-credential-detail-section"
+      >
         <div class="modern-credential-detail-title">
           <h3>{{ t('credentialCards.runtime') }}</h3>
           <div class="modern-credential-detail-title-actions">
@@ -295,12 +330,17 @@ useMessageSource(() =>
       </section>
       <section
         v-if="group.connectionType === 'subscription'"
+        v-show="!isMobile || mobileSection === 'runtime'"
         class="modern-credential-detail-section"
       >
         <h3>{{ t('credentialCards.accountInfo') }}</h3>
         <CredentialAccountInfo :row="item" />
       </section>
-      <section v-if="item.modelCooldowns.length" class="modern-credential-detail-section">
+      <section
+        v-if="item.modelCooldowns.length"
+        v-show="!isMobile || mobileSection === 'runtime'"
+        class="modern-credential-detail-section"
+      >
         <h3>{{ t('credentialCards.cooldownModels') }}</h3>
         <div
           v-for="cooldown in item.modelCooldowns"
@@ -312,12 +352,16 @@ useMessageSource(() =>
           }}</small>
         </div>
       </section>
-      <section class="modern-credential-detail-section">
+      <section
+        v-show="!isMobile || mobileSection === 'settings'"
+        ref="settingsSection"
+        class="modern-credential-detail-section"
+      >
         <div class="modern-credential-detail-settings-title">
           <h3>{{ t('credentialCards.settings') }}</h3>
-          <AppTooltip :label="t('credentialCards.autoWeight')">
+          <AppTooltip :label="t('credentialCards.autoWeight')" touchable>
             <span
-              class="modern-credential-detail-help"
+              class="modern-credential-detail-help modern-help-trigger"
               tabindex="0"
               :aria-label="t('credentialCards.autoWeight')"
             >
@@ -325,49 +369,56 @@ useMessageSource(() =>
             </span>
           </AppTooltip>
         </div>
-        <div class="modern-credential-detail-routing">
-          <AppTextField
-            v-model="weight"
-            :label="t('groups.edit.weight')"
-            :placeholder="t('credentialCards.automatic')"
-            size="sm"
-            inputmode="numeric"
-            :disabled="saving"
-            :error="attempted && weightInvalid ? t('groups.edit.weightError') : undefined"
-          />
-          <AppTextField
-            v-model="cap"
-            :label="t('credentialCards.cap')"
-            :placeholder="t('credentialCards.capInherit', { cap: item.effectiveConcurrencyLimit })"
-            size="sm"
-            inputmode="numeric"
-            :disabled="saving"
-            :error="attempted && capInvalid ? t('credentialCards.capError') : undefined"
-          />
-          <AppSegmentedField
-            v-if="channel?.proxy"
-            v-model="proxyMode"
-            :label="t('groupCreate.proxy')"
-            :options="proxyOptions"
-            size="sm"
-            :disabled="saving"
-          />
-        </div>
-        <ProxySelect
-          v-if="channel?.proxy && proxyMode === 'custom'"
-          v-model="proxyID"
-          :saved-id="saved?.proxy.id"
-          :saved-name="saved?.proxy.name"
-          :saved-address="saved?.proxy.display"
-          :reference-state="saved?.proxy.referenceState"
+        <AppTextField
+          v-model="weight"
+          :label="t('groups.edit.weight')"
+          :placeholder="t('credentialCards.automatic')"
+          size="sm"
+          inputmode="numeric"
           :disabled="saving"
-          :error="attempted && proxyInvalid ? t('proxies.selectHelp') : undefined"
+          :error="attempted && weightInvalid ? t('groups.edit.weightError') : undefined"
         />
+        <AppTextField
+          v-model="cap"
+          :label="t('credentialCards.cap')"
+          :placeholder="t('credentialCards.capInherit', { cap: item.effectiveConcurrencyLimit })"
+          size="sm"
+          inputmode="numeric"
+          :disabled="saving"
+          :error="attempted && capInvalid ? t('credentialCards.capError') : undefined"
+        />
+        <AppFormSection v-if="channel?.proxy" compact :title="t('groupCreate.proxy')">
+          <template #actions>
+            <AppSegmentedControl
+              v-model="proxyMode"
+              :label="t('groupCreate.proxy')"
+              :options="proxyOptions"
+              appearance="field"
+              size="xs"
+              :disabled="saving"
+            />
+          </template>
+          <ProxySelect
+            v-if="proxyMode === 'custom'"
+            v-model="proxyID"
+            :saved-id="saved?.proxy.id"
+            :saved-name="saved?.proxy.name"
+            :saved-address="saved?.proxy.display"
+            :reference-state="saved?.proxy.referenceState"
+            :disabled="saving"
+            :error="attempted && proxyInvalid ? t('proxies.selectHelp') : undefined"
+          />
+        </AppFormSection>
       </section>
     </template>
   </GroupWorkspacePanel>
 </template>
 <style scoped>
+.modern-credential-mobile-toolbar {
+  padding: var(--modern-space-2) var(--modern-space-5);
+  border-bottom: var(--modern-line-width) solid var(--modern-border);
+}
+
 .modern-credential-detail-section {
   display: grid;
   gap: var(--modern-space-3);
@@ -440,23 +491,9 @@ useMessageSource(() =>
   display: inline-flex;
   color: var(--modern-muted);
 }
-.modern-credential-detail-routing {
-  display: grid;
-  grid-template-columns: minmax(0, 112px) minmax(0, 1fr);
-  align-items: start;
-  gap: var(--modern-space-3);
-}
 @container modern-workspace-panel (max-width: 380px) {
   .modern-credential-detail-metrics {
     grid-template-columns: max-content minmax(0, 1fr);
-  }
-}
-@container modern-workspace-panel (max-width: 340px) {
-  .modern-credential-detail-routing {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .modern-credential-detail-routing > :first-child {
-    max-width: 112px;
   }
 }
 </style>
