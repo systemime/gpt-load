@@ -70,6 +70,8 @@ export const runtimeSettingKeys = [
   'credential_usage_balance_enabled',
   'glm_coding_plan',
   'glm_week_reset_anchor_ms',
+  'model_quota_weights',
+  'plan_quota_credits',
   'validation_interval',
   'request_log_retention_days',
   'models_dev_auto_sync_enabled',
@@ -80,6 +82,8 @@ export const runtimeSettingKeys = [
 ] as const
 
 export type RuntimeSettingKey = (typeof runtimeSettingKeys)[number]
+export type QuotaTableSettingKey = 'model_quota_weights' | 'plan_quota_credits'
+
 export type TimeoutSettingKey = Exclude<
   RuntimeSettingKey,
   | 'error_rules'
@@ -108,6 +112,8 @@ export type TimeoutSettingKey = Exclude<
   | 'auto_model'
   | 'jev'
   | 'request_audit'
+  | 'model_quota_weights'
+  | 'plan_quota_credits'
   | 'request_redaction'
 >
 export type PolicyCountSettingKey =
@@ -155,6 +161,8 @@ export interface SettingsValues {
   credential_usage_balance_enabled: boolean
   glm_coding_plan: 'standard' | 'premium'
   glm_week_reset_anchor_ms: number
+  model_quota_weights?: Record<string, number>
+  plan_quota_credits?: Record<string, { credits_5h: number; credits_7d: number }>
   credential_queue_timeout: number
   validation_interval: number
   request_log_retention_days: number

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useMobileLayout } from '@modern/app/use-mobile-layout'
 import { protocolLabel } from '@modern/i18n/protocols'
-import { Eye, EyeOff, RefreshCw, Trash2 } from '@lucide/vue'
+import { ChevronRight, Eye, EyeOff, RefreshCw, Trash2 } from '@lucide/vue'
 import { useQuery } from '@tanstack/vue-query'
 import { DialogRoot } from 'reka-ui'
 import { computed, nextTick, onScopeDispose, ref, useId, watch } from 'vue'
@@ -35,6 +35,7 @@ import {
   AppIconButton,
   AppMultiSelect,
   AppSegmentedControl,
+  AppSearchSelect,
   AppSwitch,
   AppTextArea,
   AppTextField,
@@ -93,6 +94,16 @@ const draft = ref<AccessDraft>(draftFor())
 const initial = ref('')
 const initialized = ref(false)
 const attempted = ref(false)
+let rewriteRowSeq = 0
+function addRewriteRow() {
+  draft.value.rewriteRows.push({ key: Date.now() + rewriteRowSeq++, from: '', to: '' })
+}
+const rewriteToggle = computed({
+  get: () => (draft.value.rewriteEnabled ? 'true' : 'false'),
+  set: (value: string) => {
+    draft.value.rewriteEnabled = value === 'true'
+  },
+})
 const pending = ref(false)
 const completed = ref(false)
 const error = ref('')
@@ -183,6 +194,16 @@ const modelOptions = computed(() =>
             draft.value.modes.groups === 'all' || draft.value.scope.groups.includes(group.id),
         )
         .flatMap((group) => group.modelNames),
+    ]),
+  ]
+    .sort()
+    .map((value) => ({ value, label: value })),
+)
+const rewriteModelOptions = computed(() =>
+  [
+    ...new Set([
+      ...(groups.data.value?.autoModels ?? []),
+      ...(groups.data.value?.items ?? []).flatMap((group) => group.modelNames),
     ]),
   ]
     .sort()
@@ -731,6 +752,69 @@ onScopeDispose(() => {
             />
             <p v-if="modelMismatch" class="modern-access-note">{{ t('accessKeys.mismatch') }}</p>
           </AppFormSection>
+          <AppFormSection
+            v-show="!isMobile || mobileTab === 'scope'"
+            compact
+            :title="t('accessKeys.rewriteTitle')"
+            :hint="t('accessKeys.rewriteHelp')"
+            :add-label="t('accessKeys.rewriteAdd')"
+            :add-disabled="pending || !draft.rewriteEnabled"
+            @add="addRewriteRow"
+          >
+            <template #actions>
+              <AppSegmentedControl
+                v-model="rewriteToggle"
+                :label="t('accessKeys.rewriteTitle')"
+                :options="[
+                  { value: 'false', label: t('accessKeys.rewriteOff') },
+                  { value: 'true', label: t('accessKeys.rewriteOn') },
+                ]"
+                appearance="field"
+                size="sm"
+                :disabled="pending || scopeLocked"
+              />
+            </template>
+            <div
+              v-for="(row, index) in draft.rewriteRows"
+              :key="row.key"
+              class="modern-access-rewrite-row"
+            >
+              <AppSearchSelect
+                v-model="row.from"
+                :options="rewriteModelOptions"
+                :label="t('accessKeys.rewriteSource')"
+                label-hidden
+                :placeholder="t('accessKeys.rewriteSource')"
+                allow-custom
+                :disabled="pending"
+                :error="fieldError('rewrite')"
+              />
+              <AppIcon :icon="ChevronRight" size="sm" />
+              <AppSearchSelect
+                v-model="row.to"
+                :options="rewriteModelOptions"
+                :label="t('accessKeys.rewriteTarget')"
+                label-hidden
+                :placeholder="t('accessKeys.rewriteTarget')"
+                allow-custom
+                :disabled="pending"
+              />
+              <AppIconButton
+                :icon="Trash2"
+                :label="t('accessKeys.rewriteRemove')"
+                variant="text"
+                size="xs"
+                :disabled="pending"
+                @click="draft.rewriteRows.splice(index, 1)"
+              />
+            </div>
+            <p v-if="fieldError('rewrite')" class="modern-access-note">
+              {{ t('accessKeys.rewriteInvalid') }}
+            </p>
+            <p v-if="!draft.rewriteEnabled" class="modern-access-note">
+              {{ t('accessKeys.rewriteOffHelp') }}
+            </p>
+          </AppFormSection>
           <AccessKeyQuotaEditor
             v-show="!isMobile || mobileTab === 'quota'"
             v-model="draft.rules"
@@ -875,6 +959,12 @@ onScopeDispose(() => {
   />
 </template>
 <style scoped>
+.modern-access-rewrite-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--modern-space-2) var(--modern-space-3);
+}
 .modern-access-editor-tabs {
   width: 100%;
   border-radius: 0;

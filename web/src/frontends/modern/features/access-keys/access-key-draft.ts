@@ -19,6 +19,8 @@ export interface AccessDraft {
   price: string
   recordRequestBody: boolean
   scope: AccessScope
+  rewriteEnabled: boolean
+  rewriteRows: { key: number; from: string; to: string }[]
   modes: Record<ScopeDimension, string>
   source: string
   cidrs: string
@@ -45,8 +47,21 @@ export function draftFor(row?: AccessKey, duplicate = false): AccessDraft {
         protocols: [...row.filters.protocols],
         models: [...row.filters.models],
         allowed_cidrs: [...row.filters.allowed_cidrs],
+        forced_model_rewrite: row.filters.forced_model_rewrite
+          ? { ...row.filters.forced_model_rewrite, mappings: { ...row.filters.forced_model_rewrite.mappings } }
+          : undefined,
       }
-    : { groups: [], protocols: [], models: [], allowed_cidrs: [] }
+    : {
+        groups: [],
+        protocols: [],
+        models: [],
+        allowed_cidrs: [],
+        forced_model_rewrite: undefined,
+      }
+  let rewriteRowKey = 0
+  const rewriteRows = Object.entries(scope.forced_model_rewrite?.mappings ?? {}).map(
+    ([from, to]) => ({ key: rewriteRowKey++, from, to }),
+  )
   return {
     name: row?.name ?? '',
     key: '',
@@ -59,6 +74,8 @@ export function draftFor(row?: AccessKey, duplicate = false): AccessDraft {
     // 复制配置不继承请求内容记录，新密钥需要单独确认后才能开启。
     recordRequestBody: !duplicate && row?.record_request_body === true,
     scope,
+    rewriteEnabled: scope.forced_model_rewrite?.enabled ?? false,
+    rewriteRows,
     modes: {
       groups: scope.groups.length ? 'specified' : 'all',
       protocols: scope.protocols.length ? 'specified' : 'all',
@@ -101,6 +118,7 @@ export function inputFor(draft: AccessDraft): AccessInput {
       protocols: draft.modes.protocols === 'all' ? [] : clean(draft.scope.protocols),
       models: draft.modes.models === 'all' ? [] : clean(draft.scope.models),
       allowed_cidrs: draft.source === 'all' ? [] : clean(draft.cidrs.split(/\r?\n/)),
+      forced_model_rewrite: buildRewrite(draft),
     },
     cost_limit_rules: draft.rules.map((rule) => ({
       ...(rule.id !== undefined ? { id: rule.id } : {}),
@@ -109,6 +127,19 @@ export function inputFor(draft: AccessDraft): AccessInput {
       ...(rule.kind === 'periodic' ? { period_seconds: periodSeconds(rule) } : {}),
     })),
   }
+}
+let rewriteRowKey = 0
+function buildRewrite(
+  draft: Pick<AccessDraft, 'rewriteEnabled' | 'rewriteRows'>,
+): AccessScope['forced_model_rewrite'] {
+  if (!draft.rewriteEnabled) return undefined
+  const mappings: Record<string, string> = {}
+  for (const row of draft.rewriteRows) {
+    const from = row.from.trim()
+    const to = row.to.trim()
+    if (from && to && from !== to) mappings[from] = to
+  }
+  return Object.keys(mappings).length ? { enabled: true, mappings } : undefined
 }
 function scopeJSON(scope: AccessScope): string {
   return JSON.stringify(
@@ -159,6 +190,14 @@ export function draftErrors(draft: AccessDraft, base?: AccessKey): Record<string
   )
     errors.concurrency = 'invalidNumber'
   if (draft.key && !/^[\x21-\x7e]{1,256}$/.test(draft.key)) errors.key = 'invalidKey'
+  if (
+    draft.rewriteRows.some(
+      (row) =>
+        Boolean(row.from.trim()) !== Boolean(row.to.trim()) ||
+        (Boolean(row.from.trim()) && row.from.trim() === row.to.trim()),
+    )
+  )
+    errors.rewrite = 'invalidRewrite'
   if (!/^\d*$/.test(draft.rpm) || !Number.isSafeInteger(input.rpm_limit))
     errors.rpm = 'invalidNumber'
   if (

@@ -91,14 +91,18 @@ type modelDTO struct {
 }
 
 type filterDTO struct {
-	Groups       []uint              `json:"groups"`
-	Protocols    []protocol.Protocol `json:"protocols"`
-	Models       []string            `json:"models"`
-	AllowedCIDRs []string            `json:"allowed_cidrs"`
+	Groups             []uint                     `json:"groups"`
+	Protocols          []protocol.Protocol        `json:"protocols"`
+	Models             []string                   `json:"models"`
+	AllowedCIDRs       []string                   `json:"allowed_cidrs"`
+	ForcedModelRewrite *state.ForcedModelRewrite  `json:"forced_model_rewrite,omitempty"`
 }
 
 func (f filterDTO) toState() state.FilterSet {
 	filters := state.FilterSet{}
+	if f.ForcedModelRewrite != nil {
+		filters.ForcedModelRewrite = *f.ForcedModelRewrite
+	}
 	if len(f.Groups) > 0 {
 		filters.Groups = make(map[uint]struct{}, len(f.Groups))
 		for _, id := range f.Groups {
@@ -313,7 +317,7 @@ func queryCompileRows(ctx context.Context, db *gorm.DB) (compileRows, error) {
 		return compileRows{}, fmt.Errorf("query credential metadata: %w", err)
 	}
 	if err := db.
-		Select("id", "name", "key_hash", "key_prefix", "key_suffix", "status", "filters", "rpm_limit", "concurrency_limit", "expires_at_ms", "price_multiplier_micros").
+		Select("id", "name", "key_hash", "key_prefix", "key_suffix", "status", "filters", "rpm_limit", "concurrency_limit", "expires_at_ms", "price_multiplier_micros", "record_request_body").
 		Order("id ASC").
 		Find(&rows.accessKeys).Error; err != nil {
 		return compileRows{}, fmt.Errorf("query access keys: %w", err)
@@ -870,7 +874,8 @@ func mapAccessKeys(
 			ID:              row.ID, Name: row.Name, KeyHash: row.KeyHash, KeyPrefix: *row.KeyPrefix, KeySuffix: row.KeySuffix,
 			Status: state.AccessKeyStatus(row.Status), Filters: filters.toState(), RPMLimit: row.RPMLimit, ConcurrencyLimit: row.ConcurrencyLimit,
 			ExpiresAtMS: cloneInt64Pointer(row.ExpiresAtMS), AllowedPeerCIDRs: allowedPeerCIDRs,
-			CostLimitRules: append([]accessquota.Rule(nil), rulesByAccessKey[row.ID]...),
+			CostLimitRules:    append([]accessquota.Rule(nil), rulesByAccessKey[row.ID]...),
+			RecordRequestBody: row.RecordRequestBody,
 		})
 	}
 	return result, nil

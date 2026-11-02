@@ -54,17 +54,20 @@ type Service struct {
 	writer          batchWriter
 	redactor        *redact.Redactor
 	retentionPolicy RetentionPolicyProvider
-	timerFactory    workerTimerFactory
-	logger          *logrus.Logger
-	now             func() time.Time
-	startErr        error
-	accessQuota     *accessquota.Runtime
-	quotaWriter     accessQuotaCheckpointWriter
-	quotaWake       chan struct{}
-	passiveQuota    passiveQuotaFlusher
-	rpmStore        *rpm.Store
-	rpmWriteMu      sync.Mutex
-	rpmWarningAt    time.Time
+	// quotaWeightsProvider 提供生效模型倍率表(设置变更随快照刷新),
+	// 供配额折算 SQL 使用(nil 回退内置默认)。
+	quotaWeightsProvider QuotaWeightsProvider
+	timerFactory         workerTimerFactory
+	logger               *logrus.Logger
+	now                  func() time.Time
+	startErr             error
+	accessQuota          *accessquota.Runtime
+	quotaWriter          accessQuotaCheckpointWriter
+	quotaWake            chan struct{}
+	passiveQuota         passiveQuotaFlusher
+	rpmStore             *rpm.Store
+	rpmWriteMu           sync.Mutex
+	rpmWarningAt         time.Time
 
 	stateMu       sync.Mutex
 	state         lifecycleState
@@ -73,6 +76,9 @@ type Service struct {
 	stopRequested chan struct{}
 	shutdownDone  chan struct{}
 	shutdownErr   error
+
+	requestBodyBudget       int64
+	pendingRequestBodyBytes atomic.Int64
 
 	enqueuedTotal                          atomic.Uint64
 	persistedTotal                         atomic.Uint64
@@ -144,6 +150,22 @@ func (service *Service) wakeAccessQuotaCheckpoint() {
 // flusher and shares this worker's existing quotaWake with it, so a dirty
 // passive observation and a dirty AccessQuota checkpoint wake the same
 // worker cycle. Call it before Start; a nil flusher is a no-op.
+// SetQuotaWeightsProvider 注入模型倍率表来源(快照编译产物); nil 表回退内置默认。
+func (service *Service) SetQuotaWeightsProvider(provider QuotaWeightsProvider) {
+	if service == nil || provider == nil {
+		return
+	}
+	service.quotaWeightsProvider = provider
+}
+
+// currentQuotaWeights 返回当前生效倍率表; 未注入 provider 时回退内置默认表。
+func (service *Service) currentQuotaWeights() map[string]float64 {
+	if service == nil || service.quotaWeightsProvider == nil {
+		return nil
+	}
+	return service.quotaWeightsProvider.ModelQuotaWeights()
+}
+
 func (service *Service) SetPassiveQuotaFlusher(flusher passiveQuotaFlusher) {
 	if service == nil || flusher == nil {
 		return
@@ -196,6 +218,8 @@ func newService(
 		now:           time.Now,
 		state:         lifecycleNew,
 		stopRequested: make(chan struct{}),
+
+		requestBodyBudget: maxPendingRequestBodyBytes,
 	}
 }
 
@@ -242,11 +266,13 @@ func (service *Service) Emit(event telemetry.RequestEvent) {
 	}
 
 	cloned := cloneEvent(event)
+	queued := service.reserveRequestBody(cloned)
 	queueFull := false
 	select {
-	case service.queue <- queuedEvent{Event: cloned}:
+	case service.queue <- queued:
 		service.enqueuedTotal.Add(1)
 	default:
+		service.releaseRequestBodies([]queuedEvent{queued})
 		service.droppedQueueFullTotal.Add(1)
 		queueFull = true
 	}

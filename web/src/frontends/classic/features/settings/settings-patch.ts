@@ -133,6 +133,10 @@ export function setSettingsOverride(
       next.values.glm_coding_plan = base.values.glm_coding_plan
     } else if (key === 'glm_week_reset_anchor_ms') {
       next.values.glm_week_reset_anchor_ms = base.values.glm_week_reset_anchor_ms
+    } else if (key === 'model_quota_weights') {
+      next.values.model_quota_weights = base.values.model_quota_weights
+    } else if (key === 'plan_quota_credits') {
+      next.values.plan_quota_credits = base.values.plan_quota_credits
     } else if (key === 'models_dev_auto_sync_enabled') {
       next.values.models_dev_auto_sync_enabled = base.values.models_dev_auto_sync_enabled
     } else if (key === 'cors') {
@@ -194,6 +198,8 @@ function normalizedWireValue(
   | RouteStrategy
   | CodexLiveMode
   | SettingsValues['glm_coding_plan']
+  | SettingsValues['model_quota_weights']
+  | SettingsValues['plan_quota_credits']
   | HeaderRulesDto
   | CORSConfigDto
   | AutoModelConfigDto
@@ -239,6 +245,8 @@ function normalizedIdentityValue(
   | RouteStrategy
   | CodexLiveMode
   | SettingsValues['glm_coding_plan']
+  | SettingsValues['model_quota_weights']
+  | SettingsValues['plan_quota_credits']
   | HeaderRulesDto
   | CORSConfigDto
   | AutoModelConfigDto

@@ -2,7 +2,7 @@
 import { useMobileLayout } from '@modern/app/use-mobile-layout'
 import { codexLiveModes, type CodexLiveMode } from '@shared/codex-live'
 import { protocolLabel } from '@modern/i18n/protocols'
-import { Trash2 } from '@lucide/vue'
+import { ChevronRight, Trash2 } from '@lucide/vue'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
 import { useMessageSource } from '@modern/app/messages'
@@ -81,6 +81,20 @@ const removeHeaders = ref('')
 const rules = ref<ParameterRule[]>([])
 const errorRules = ref<ErrorRule[]>([])
 const errorRulesMode = ref('inherit')
+const rewriteEnabled = ref('false')
+const rewriteRows = ref<{ key: number; from: string; to: string }[]>([])
+let nextRewriteRow = 0
+function addRewriteRow() {
+  rewriteRows.value.push({ key: nextRewriteRow++, from: '', to: '' })
+}
+const rewriteInvalid = computed(
+  () =>
+    rewriteRows.value.some(
+      (row) =>
+        Boolean(row.from.trim()) !== Boolean(row.to.trim()) ||
+        (Boolean(row.from.trim()) && row.from.trim() === row.to.trim()),
+    ),
+)
 const errorRulesPending = ref(false)
 const rulesValid = ref(true)
 const rulesEditor = ref<InstanceType<typeof ParameterRulesEditor>>()
@@ -107,6 +121,8 @@ function snapshot(): string {
     rules.value,
     errorRulesMode.value,
     errorRulesMode.value === 'inherit' ? [] : errorRules.value,
+    rewriteEnabled.value,
+    rewriteRows.value,
   ])
 }
 const dirty = computed(
@@ -151,6 +167,10 @@ watch(
     rules.value = JSON.parse(JSON.stringify(data.overrides.parameter_overrides ?? []))
     errorRulesMode.value = data.overrides.error_rules === undefined ? 'inherit' : 'override'
     errorRules.value = cloneErrorRules(data.overrides.error_rules ?? [])
+    rewriteEnabled.value = data.overrides.forced_model_rewrite?.enabled ? 'true' : 'false'
+    rewriteRows.value = Object.entries(data.overrides.forced_model_rewrite?.mappings ?? {}).map(
+      ([from, to]) => ({ key: nextRewriteRow++, from, to: String(to) }),
+    )
     rulesValid.value = true
     baseline.value = snapshot()
   },
@@ -170,6 +190,7 @@ const proxyOptions = computed(() => [
   { value: 'direct', label: t('groupCreate.proxyDirect') },
   { value: 'custom', label: t('settingsForm.proxy.custom') },
 ])
+const modelChoices = computed(() => groupValidationModelOptions(props.models))
 const modelOptions = computed(() => [
   { value: '', label: t('groupDetail.automatic') },
   ...groupValidationModelOptions(props.models),
@@ -253,6 +274,10 @@ async function save(): Promise<void> {
     proxyInvalid.value ||
     headerInvalid.value
   ) {
+    if (rewriteInvalid.value) {
+      if (isMobile.value) mobileSection.value = 'rewrite'
+      return
+    }
     if (isMobile.value)
       mobileSection.value =
         Object.keys(paramErrors.value).length || proxyInvalid.value
@@ -287,6 +312,15 @@ async function save(): Promise<void> {
   else delete overrides.parameter_overrides
   if (errorRulesMode.value === 'inherit') delete overrides.error_rules
   else overrides.error_rules = cloneErrorRules(errorRules.value)
+  const rewriteMappings: Record<string, string> = {}
+  for (const row of rewriteRows.value) {
+    const from = row.from.trim()
+    const to = row.to.trim()
+    if (from && to) rewriteMappings[from] = to
+  }
+  if (rewriteEnabled.value === 'true' && Object.keys(rewriteMappings).length)
+    overrides.forced_model_rewrite = { enabled: true, mappings: rewriteMappings }
+  else delete overrides.forced_model_rewrite
   const patch: AdvancedSettingsPatch = {}
   const nextParams = groupConnectionParams(params.value, props.channel)
   if (JSON.stringify(nextParams) !== JSON.stringify(base.params)) patch.params = nextParams
@@ -413,6 +447,7 @@ useMessageSource(() => (error.value ? { text: error.value, tone: 'danger' } : un
             { value: 'runtime', label: t('credentialCards.runtime') },
             { value: 'headers', label: t('groupDetail.headers') },
             { value: 'errors', label: t('groupDetail.errorHandling') },
+            { value: 'rewrite', label: t('groupDetail.rewrite') },
             { value: 'parameters', label: t('groupDetail.parameters') },
           ]"
         /></div
@@ -650,6 +685,71 @@ useMessageSource(() => (error.value ? { text: error.value, tone: 'danger' } : un
         />
       </AppFormSection>
       <AppFormSection
+        v-show="!isMobile || mobileSection === 'rewrite'"
+        compact
+        :title="t('groupDetail.rewrite')"
+        :hint="t('groupDetail.rewriteHelp')"
+        :add-label="t('groupDetail.rewriteAdd')"
+        :add-disabled="busy || !rewriteEnabled"
+        @add="addRewriteRow"
+      >
+        <template #actions>
+          <AppSegmentedControl
+            v-model="rewriteEnabled"
+            :label="t('groupDetail.rewrite')"
+            :options="[
+              { value: 'false', label: t('groupDetail.off') },
+              { value: 'true', label: t('groupDetail.on') },
+            ]"
+            appearance="field"
+            size="xs"
+            :disabled="busy"
+          />
+        </template>
+        <div
+          v-for="(row, index) in rewriteRows"
+          :key="row.key"
+          class="modern-group-rewrite-row"
+        >
+          <AppSelect
+            v-model="row.from"
+            :options="modelChoices"
+            :label="t('groupDetail.rewriteSource')"
+            :placeholder="t('groupDetail.rewriteSource')"
+            :disabled="busy"
+            :error="
+              attempted && rewriteInvalid && !row.from.trim() && row.to.trim()
+                ? t('groupDetail.rewriteInvalid')
+                : undefined
+            "
+          />
+          <AppIcon :icon="ChevronRight" size="sm" />
+          <AppSelect
+            v-model="row.to"
+            :options="modelChoices"
+            :label="t('groupDetail.rewriteTarget')"
+            :placeholder="t('groupDetail.rewriteTarget')"
+            :disabled="busy"
+            :error="
+              attempted && rewriteInvalid && row.from.trim() && !row.to.trim()
+                ? t('groupDetail.rewriteInvalid')
+                : undefined
+            "
+          />
+          <AppIconButton
+            :icon="Trash2"
+            :label="t('groupDetail.rewriteRemove')"
+            variant="text"
+            size="xs"
+            :disabled="busy"
+            @click="rewriteRows.splice(index, 1)"
+          />
+        </div>
+        <p v-if="rewriteEnabled !== 'true'" class="modern-group-rewrite-off">
+          {{ t('groupDetail.rewriteOffHelp') }}
+        </p>
+      </AppFormSection>
+      <AppFormSection
         v-show="!isMobile || mobileSection === 'parameters'"
         compact
         :title="t('groupDetail.parameters')"
@@ -704,6 +804,17 @@ useMessageSource(() => (error.value ? { text: error.value, tone: 'danger' } : un
 </template>
 
 <style scoped>
+.modern-group-rewrite-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--modern-space-2) var(--modern-space-3);
+}
+.modern-group-rewrite-off {
+  margin: 0;
+  color: var(--modern-color-muted, var(--modern-color-text-secondary, #667));
+  font-size: var(--modern-font-size-sm, 13px);
+}
 .modern-advanced-mobile-toolbar {
   padding: var(--modern-space-3) var(--modern-space-5);
   border-bottom: var(--modern-line-width) solid var(--modern-border);

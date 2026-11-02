@@ -170,12 +170,14 @@ func (server *Server) handleCredentialLoad(c *gin.Context) {
 	capacity := slots.Capacity()
 	plan := state.GlmPlanStandard
 	var catalog map[uint]state.GroupCatalogView
-	if snapshot := service.manager.Current(); snapshot != nil {
+	snapshot := service.manager.Current()
+	if snapshot != nil {
 		capacity = snapshot.Settings.CredentialConcurrencyLimit
 		plan = snapshot.Settings.GlmCodingPlan
 		catalog = snapshot.GroupCatalog
 	}
-	quota5h, quota7d := plan.Quota()
+	// 套餐额度: plan_quota_credits 设置覆盖优先(新厂商接入无需改代码), 否则内置数值。
+	quota5h, quota7d := snapshot.PlanQuotaCredits(plan)
 
 	views := service.registry.Snapshot()
 	usageSnapshot := service.registry.UsageTracker().SnapshotAll()

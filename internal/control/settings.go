@@ -16,6 +16,7 @@ import (
 
 	"gpt-load/internal/automodel"
 	"gpt-load/internal/execution"
+	"gpt-load/internal/health"
 	"gpt-load/internal/jev"
 	"gpt-load/internal/outboundproxy"
 	"gpt-load/internal/platform/encryption"
@@ -45,38 +46,41 @@ type CORSConfigResponse struct {
 }
 
 type SettingsValuesResponse struct {
-	GlobalConcurrencyLimit           int64                 `json:"global_concurrency_limit"`
-	DefaultAccessKeyConcurrencyLimit int64                 `json:"default_access_key_concurrency_limit"`
-	DefaultGroupConcurrencyLimit     int64                 `json:"default_group_concurrency_limit"`
-	RequestRedaction                 []requestredact.Rule  `json:"request_redaction"`
-	Jev                              jev.Config            `json:"jev"`
-	RequestAudit                     requestaudit.Config   `json:"request_audit"`
-	AutoModel                        AutoModelSettingsView `json:"auto_model"`
-	FirstByteTimeout                 int64                 `json:"first_byte_timeout"`
-	RequestTimeout                   int64                 `json:"request_timeout"`
-	StreamIdleTimeout                int64                 `json:"stream_idle_timeout"`
-	HeaderRules                      HeaderRulesResponse   `json:"header_rules"`
-	CORS                             CORSConfigResponse    `json:"cors"`
-	ResponseHeaderRules              HeaderRulesResponse   `json:"response_header_rules"`
-	RetryCount                       int                   `json:"retry_count"`
-	RouteStrategy                    state.RouteStrategy   `json:"route_strategy"`
-	BlacklistThreshold               int                   `json:"blacklist_threshold"`
-	AffinityEnabled                  bool                  `json:"affinity_enabled"`
-	CodexLiveMode                    state.CodexLiveMode   `json:"codex_live_mode"`
-	ResponsesWebsocketEnabled        bool                  `json:"responses_websocket_enabled"`
-	EmptyResponseRetry               bool                  `json:"empty_response_retry"`
-	AffinityTTL                      int64                 `json:"affinity_ttl"`
-	AffinityCapacity                 int                   `json:"affinity_capacity"`
-	CredentialConcurrencyLimit       int                   `json:"credential_concurrency_limit"`
-	CredentialQueueEnabled           bool                  `json:"credential_queue_enabled"`
-	CredentialUsageBalance           bool                  `json:"credential_usage_balance_enabled"`
-	GlmCodingPlan                    state.GlmCodingPlan   `json:"glm_coding_plan"`
-	GlmWeekResetAnchorMS             int64                 `json:"glm_week_reset_anchor_ms"`
-	CredentialQueueTimeout           int64                 `json:"credential_queue_timeout"`
-	ValidationInterval               int64                 `json:"validation_interval"`
-	RequestLogRetentionDays          int                   `json:"request_log_retention_days"`
-	ModelsDevAutoSyncEnabled         bool                  `json:"models_dev_auto_sync_enabled"`
-	ProxyConfig                      outboundproxy.View    `json:"proxy_config"`
+	ErrorRules                       []health.ErrorRule                `json:"error_rules"`
+	GlobalConcurrencyLimit           int64                             `json:"global_concurrency_limit"`
+	DefaultAccessKeyConcurrencyLimit int64                             `json:"default_access_key_concurrency_limit"`
+	DefaultGroupConcurrencyLimit     int64                             `json:"default_group_concurrency_limit"`
+	RequestRedaction                 []requestredact.Rule              `json:"request_redaction"`
+	Jev                              jev.Config                        `json:"jev"`
+	RequestAudit                     requestaudit.Config               `json:"request_audit"`
+	AutoModel                        AutoModelSettingsView             `json:"auto_model"`
+	FirstByteTimeout                 int64                             `json:"first_byte_timeout"`
+	RequestTimeout                   int64                             `json:"request_timeout"`
+	StreamIdleTimeout                int64                             `json:"stream_idle_timeout"`
+	HeaderRules                      HeaderRulesResponse               `json:"header_rules"`
+	CORS                             CORSConfigResponse                `json:"cors"`
+	ResponseHeaderRules              HeaderRulesResponse               `json:"response_header_rules"`
+	RetryCount                       int                               `json:"retry_count"`
+	RouteStrategy                    state.RouteStrategy               `json:"route_strategy"`
+	BlacklistThreshold               int                               `json:"blacklist_threshold"`
+	AffinityEnabled                  bool                              `json:"affinity_enabled"`
+	CodexLiveMode                    state.CodexLiveMode               `json:"codex_live_mode"`
+	ResponsesWebsocketEnabled        bool                              `json:"responses_websocket_enabled"`
+	EmptyResponseRetry               bool                              `json:"empty_response_retry"`
+	AffinityTTL                      int64                             `json:"affinity_ttl"`
+	AffinityCapacity                 int                               `json:"affinity_capacity"`
+	CredentialConcurrencyLimit       int                               `json:"credential_concurrency_limit"`
+	CredentialQueueEnabled           bool                              `json:"credential_queue_enabled"`
+	CredentialUsageBalance           bool                              `json:"credential_usage_balance_enabled"`
+	GlmCodingPlan                    state.GlmCodingPlan               `json:"glm_coding_plan"`
+	GlmWeekResetAnchorMS             int64                             `json:"glm_week_reset_anchor_ms"`
+	ModelQuotaWeights                map[string]float64                `json:"model_quota_weights"`
+	PlanQuotaCredits                 map[string]state.PlanQuotaCredits `json:"plan_quota_credits"`
+	CredentialQueueTimeout           int64                             `json:"credential_queue_timeout"`
+	ValidationInterval               int64                             `json:"validation_interval"`
+	RequestLogRetentionDays          int                               `json:"request_log_retention_days"`
+	ModelsDevAutoSyncEnabled         bool                              `json:"models_dev_auto_sync_enabled"`
+	ProxyConfig                      outboundproxy.View                `json:"proxy_config"`
 }
 
 type DecisionRouteOption struct {
@@ -452,6 +456,7 @@ func mapSettingsResponse(
 		DecisionModels: decisionModelNames(snapshot),
 		Revision:       snapshot.Revision,
 		Values: SettingsValuesResponse{
+			ErrorRules:       settings.ErrorRules.Rules(),
 			RequestRedaction: snapshot.RequestRedaction.Rules(),
 			AutoModel:        newAutoModelSettingsView(snapshot.AutoModels),
 			Jev:              snapshot.Jev, RequestAudit: snapshot.RequestAudit,
@@ -492,6 +497,8 @@ func mapSettingsResponse(
 			CredentialUsageBalance:           settings.CredentialUsageBalance,
 			GlmCodingPlan:                    settings.GlmCodingPlan,
 			GlmWeekResetAnchorMS:             settings.GlmWeekResetAnchorMS,
+			ModelQuotaWeights:                settings.ModelQuotaWeights,
+			PlanQuotaCredits:                 settings.PlanQuotaCredits,
 			CredentialQueueTimeout:           durationSeconds(settings.CredentialQueueTimeout),
 			ValidationInterval:               durationSeconds(settings.ValidationInterval),
 			RequestLogRetentionDays:          settings.RequestLogRetentionDays,

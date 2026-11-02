@@ -163,7 +163,7 @@ func newWithClock(
 		allowedCredentialIDs:  cloneAllowedCredentialIDs(query),
 		preferredCredentialID: query.PreferredCredentialID,
 		credentialSlots:       query.CredentialSlots,
-		slotWeight:            slotWeightForQuery(query),
+		slotWeight:            slotWeightForQuery(query, snapshot),
 		credentialUsage:       query.CredentialUsage,
 		usageBalance:          query.UsageBalance,
 		tried:                 make(map[uint]struct{}),
@@ -401,11 +401,15 @@ func (iterator *Iterator) Next() (Selection, error) {
 }
 
 // slotWeightForQuery 返回本查询每个请求占用的并发槽位权重(按外部模型判定)。
-func slotWeightForQuery(query Query) int64 {
+func slotWeightForQuery(query Query, snapshot *state.ConfigSnapshot) int64 {
 	if query.ExternalModel == nil || *query.ExternalModel == "" {
 		return 1
 	}
-	return state.SlotWeight(*query.ExternalModel)
+	var weights map[string]float64
+	if snapshot != nil {
+		weights = snapshot.ModelQuotaWeights
+	}
+	return state.SlotWeightIn(weights, *query.ExternalModel)
 }
 
 // priorityCandidates 跨原生与转换选档；失败后降至下一可用档，最低档保留未试候选。

@@ -330,6 +330,11 @@ func normalizeGroupSettings(settings config.Settings) (config.Settings, models.J
 			return nil, nil, app_errors.ErrValidation
 		}
 	}
+	if value, exists := settings[state.SettingForcedModelRewrite]; exists {
+		if _, err := state.ParseForcedModelRewrite(state.SettingForcedModelRewrite, value); err != nil {
+			return nil, nil, app_errors.ErrValidation
+		}
+	}
 	encoded, err := json.Marshal(settings)
 	if err != nil {
 		return nil, nil, app_errors.ErrValidation

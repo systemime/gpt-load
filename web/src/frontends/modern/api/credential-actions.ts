@@ -197,6 +197,29 @@ export async function testCredential(
       boolean(data.can_restore) && data.restore_proof !== null ? text(data.restore_proof) : null,
   }
 }
+export async function testCredentialAccess(
+  client: ApiClient,
+  group: number,
+  id: number,
+  signal: AbortSignal,
+): Promise<CredentialTestResult> {
+  const data = record(
+    await client.request(`/api/groups/${group}/credentials/${id}/test`, {
+      method: 'POST',
+      json: {},
+      signal,
+    }),
+  )
+  return {
+    outcome: oneOf(data.outcome, ['passed', 'failed', 'inconclusive']),
+    latency: integer(data.latency_ms),
+    model: text(data.model),
+    protocol: text(data.protocol),
+    reason: data.reason === null ? null : text(data.reason),
+    proof:
+      boolean(data.can_restore) && data.restore_proof !== null ? text(data.restore_proof) : null,
+  }
+}
 export async function restoreTestedCredential(
   client: ApiClient,
   group: number,

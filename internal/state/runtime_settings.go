@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"gpt-load/internal/health"
 	"gpt-load/internal/parameteroverride"
 	"gpt-load/internal/platform/config"
 	"gpt-load/internal/platform/httpheader"
@@ -40,10 +41,14 @@ const (
 	SettingCredentialUsageBalance           = "credential_usage_balance_enabled"
 	SettingGlmCodingPlan                    = "glm_coding_plan"
 	SettingGlmWeekResetAnchorMS             = "glm_week_reset_anchor_ms"
+	SettingModelQuotaWeights                = "model_quota_weights"
+	SettingPlanQuotaCredits                 = "plan_quota_credits"
 	SettingValidationInterval               = "validation_interval"
 	SettingRequestLogRetentionDays          = "request_log_retention_days"
 	SettingModelsDevAutoSyncEnabled         = "models_dev_auto_sync_enabled"
 	SettingParameterOverrides               = "parameter_overrides"
+	SettingErrorRules                       = "error_rules"
+	SettingForcedModelRewrite               = "forced_model_rewrite"
 )
 
 type CodexLiveMode string
@@ -80,6 +85,149 @@ func (plan GlmCodingPlan) Quota() (credits5h float64, creditsWeek float64) {
 	}
 }
 
+// PlanQuotaCredits 是一套套餐档位的额度数值(水位展示与预警用)。
+type PlanQuotaCredits struct {
+	Credits5h float64 `json:"credits_5h"`
+	Credits7d float64 `json:"credits_7d"`
+}
+
+// ForcedModelRewrite 分组级强制改写: 命中 Mappings 键的客户端模型请求一律
+// 改写到目标模型(路由、报文、冷却、用量全部跟随目标)。分组专属设置,
+// 不出现在全局设置键里; from/to 都必须是分组已配置的模型。
+type ForcedModelRewrite struct {
+	Enabled  bool              `json:"enabled"`
+	Mappings map[string]string `json:"mappings"`
+}
+
+const maxForcedRewriteEntries = 32
+
+// ParseForcedModelRewrite 导出给设置保存路径复用(分组模型归属校验在快照编译)。
+func ParseForcedModelRewrite(key string, value any) (ForcedModelRewrite, error) {
+	object, err := settingJSONObject(key, value)
+	if err != nil {
+		return ForcedModelRewrite{}, err
+	}
+	rewrite := ForcedModelRewrite{Mappings: map[string]string{}}
+	if enabled, ok := object["enabled"]; ok {
+		parsed, err := strictBoolean(key+".enabled", enabled)
+		if err != nil {
+			return ForcedModelRewrite{}, err
+		}
+		rewrite.Enabled = parsed
+	}
+	rawMappings, ok := object["mappings"]
+	if !ok || rawMappings == nil {
+		return rewrite, nil
+	}
+	mappings, err := settingJSONObject(key+".mappings", rawMappings)
+	if err != nil {
+		return ForcedModelRewrite{}, err
+	}
+	if len(mappings) > maxForcedRewriteEntries {
+		return ForcedModelRewrite{}, fmt.Errorf("%s.mappings: at most %d entries", key, maxForcedRewriteEntries)
+	}
+	for from, toRaw := range mappings {
+		source := strings.TrimSpace(from)
+		target, err := settingNonEmptyString(key+".mappings", toRaw)
+		if err != nil {
+			return ForcedModelRewrite{}, err
+		}
+		if source == "" || len(source) > 128 || len(target) > 128 {
+			return ForcedModelRewrite{}, fmt.Errorf("%s.mappings: invalid model name %q", key, from)
+		}
+		if source == target {
+			return ForcedModelRewrite{}, fmt.Errorf("%s.mappings: %q must differ from its target", key, source)
+		}
+		rewrite.Mappings[source] = target
+	}
+	return rewrite, nil
+}
+
+// EffectiveForcedMappings 返回生效改写表(未启用或空表返回 nil); 无效条目
+// (模型已从分组移除)由快照编译阶段过滤。
+func (rewrite ForcedModelRewrite) EffectiveForcedMappings() map[string]string {
+	if !rewrite.Enabled || len(rewrite.Mappings) == 0 {
+		return nil
+	}
+	merged := make(map[string]string, len(rewrite.Mappings))
+	for from, to := range rewrite.Mappings {
+		merged[from] = to
+	}
+	return merged
+}
+
+func settingNonEmptyString(path string, value any) (string, error) {
+	text, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("%s must be a string", path)
+	}
+	if strings.TrimSpace(text) == "" || len(text) > 128 {
+		return "", fmt.Errorf("%s must be nonblank text up to 128 bytes", path)
+	}
+	return text, nil
+}
+
+// parseModelQuotaWeights 解析并校验 model_quota_weights 设置:
+// JSON 对象 {模型名: 正倍率}, 供槽位占用与配额折算共用。
+func parseModelQuotaWeights(key string, value any) (map[string]float64, error) {
+	object, err := settingJSONObject(key, value)
+	if err != nil {
+		return nil, err
+	}
+	if len(object) > maxModelQuotaWeightEntries {
+		return nil, fmt.Errorf("%s: at most %d entries", key, maxModelQuotaWeightEntries)
+	}
+	weights := make(map[string]float64, len(object))
+	for modelName, raw := range object {
+		name := strings.TrimSpace(modelName)
+		if name == "" || len(name) > 128 {
+			return nil, fmt.Errorf("%s: invalid model name %q", key, modelName)
+		}
+		weight, err := settingPositiveNumber(key, raw)
+		if err != nil {
+			return nil, err
+		}
+		if weight > maxModelQuotaWeight {
+			return nil, fmt.Errorf("%s: weight for %q must be at most %d", key, name, maxModelQuotaWeight)
+		}
+		weights[name] = weight
+	}
+	return weights, nil
+}
+
+// parsePlanQuotaCredits 解析并校验 plan_quota_credits 设置:
+// JSON 对象 {套餐名: {credits_5h, credits_7d}}, 数值非负。
+func parsePlanQuotaCredits(key string, value any) (map[string]PlanQuotaCredits, error) {
+	object, err := settingJSONObject(key, value)
+	if err != nil {
+		return nil, err
+	}
+	if len(object) > maxPlanQuotaEntries {
+		return nil, fmt.Errorf("%s: at most %d plans", key, maxPlanQuotaEntries)
+	}
+	credits := make(map[string]PlanQuotaCredits, len(object))
+	for planName, raw := range object {
+		name := strings.TrimSpace(planName)
+		if name == "" || len(name) > 64 {
+			return nil, fmt.Errorf("%s: invalid plan name %q", key, planName)
+		}
+		fields, err := settingJSONObject(key, raw)
+		if err != nil {
+			return nil, err
+		}
+		credits5h, err := settingNonNegativeNumber(key, fields["credits_5h"])
+		if err != nil {
+			return nil, err
+		}
+		credits7d, err := settingNonNegativeNumber(key, fields["credits_7d"])
+		if err != nil {
+			return nil, err
+		}
+		credits[name] = PlanQuotaCredits{Credits5h: credits5h, Credits7d: credits7d}
+	}
+	return credits, nil
+}
+
 const (
 	defaultRequestLogRetentionDays = 7
 	minRequestLogRetentionDays     = 1
@@ -95,9 +243,14 @@ const (
 	maxCredentialQueueTimeout     = 600
 	defaultCredentialQueueTimeout = 30
 	maxJSONSafeInteger            = int64(1<<53 - 1)
+	maxJSONSafeFloat              = float64(1<<53 - 1)
+	maxModelQuotaWeightEntries    = 128
+	maxModelQuotaWeight           = 10_000
+	maxPlanQuotaEntries           = 64
 )
 
 type RuntimeSettings struct {
+	ErrorRules                       health.ErrorRules
 	GlobalConcurrencyLimit           int64
 	DefaultAccessKeyConcurrencyLimit int64
 	DefaultGroupConcurrencyLimit     int64
@@ -124,12 +277,18 @@ type RuntimeSettings struct {
 	// GlmWeekResetAnchorMS 是官方周周期重置锚点(epoch 毫秒, UTC+8 时区语义由使用者保证)。
 	// 周窗口 = 最近一次锚点 + 7 天整数倍; 0 表示退化为滚动 7 天窗口。
 	GlmWeekResetAnchorMS int64
-	ValidationInterval               time.Duration
-	RequestLogRetentionDays          int
-	ModelsDevAutoSyncEnabled         bool
+	// ModelQuotaWeights 是模型倍率覆盖(仅设置项, 内置默认见 ModelQuotaWeights);
+	// nil 表示无覆盖。快照编译时与内置表合并为生效表。
+	ModelQuotaWeights map[string]float64
+	// PlanQuotaCredits 按套餐名覆盖积分额度(水位展示); nil 表示用官方内置数值。
+	PlanQuotaCredits         map[string]PlanQuotaCredits
+	ValidationInterval       time.Duration
+	RequestLogRetentionDays  int
+	ModelsDevAutoSyncEnabled bool
 }
 
 type ResolvedGroupSettings struct {
+	ErrorRules                health.ErrorRules
 	ConcurrencyLimit          int64
 	Timeouts                  TimeoutConfig
 	HeaderRules               HeaderRules
@@ -139,6 +298,7 @@ type ResolvedGroupSettings struct {
 	ResponsesWebsocketEnabled bool
 	EmptyResponseRetry        bool
 	ParameterOverrides        parameteroverride.Rules
+	ForcedModelRewrite        ForcedModelRewrite
 }
 
 func DefaultRuntimeSettings() RuntimeSettings {
@@ -194,9 +354,13 @@ func IsRuntimeSettingKey(key string) bool {
 		SettingCredentialUsageBalance,
 		SettingGlmCodingPlan,
 		SettingGlmWeekResetAnchorMS,
+		SettingModelQuotaWeights,
+		SettingPlanQuotaCredits,
 		SettingValidationInterval,
 		SettingRequestLogRetentionDays,
 		SettingModelsDevAutoSyncEnabled:
+		return true
+	case SettingErrorRules:
 		return true
 	default:
 		return false
@@ -244,6 +408,12 @@ func ResolveRuntimeSettings(settings config.Settings) (RuntimeSettings, error) {
 				return RuntimeSettings{}, err
 			}
 			resolved.HeaderRules = rules
+		case SettingErrorRules:
+			rules, err := health.CompileErrorRules(value, "global")
+			if err != nil {
+				return RuntimeSettings{}, err
+			}
+			resolved.ErrorRules = rules
 		case SettingCORS:
 			cors, err := parseCORSConfig(value)
 			if err != nil {
@@ -346,6 +516,18 @@ func ResolveRuntimeSettings(settings config.Settings) (RuntimeSettings, error) {
 				return RuntimeSettings{}, err
 			}
 			resolved.GlmWeekResetAnchorMS = int64(anchor)
+		case SettingModelQuotaWeights:
+			weights, err := parseModelQuotaWeights(key, value)
+			if err != nil {
+				return RuntimeSettings{}, err
+			}
+			resolved.ModelQuotaWeights = weights
+		case SettingPlanQuotaCredits:
+			credits, err := parsePlanQuotaCredits(key, value)
+			if err != nil {
+				return RuntimeSettings{}, err
+			}
+			resolved.PlanQuotaCredits = credits
 		case SettingValidationInterval:
 			seconds, err := positiveWholeSeconds(key, value)
 			if err != nil {
@@ -381,6 +563,7 @@ func ResolveGroupRuntimeSettings(
 	settings config.Settings,
 ) (ResolvedGroupSettings, error) {
 	resolved := ResolvedGroupSettings{
+		ErrorRules:       base.ErrorRules,
 		ConcurrencyLimit: base.DefaultGroupConcurrencyLimit,
 		Timeouts: TimeoutConfig{
 			FirstByte:  base.FirstByteTimeout,
@@ -465,6 +648,18 @@ func ResolveGroupRuntimeSettings(
 				return ResolvedGroupSettings{}, err
 			}
 			resolved.ParameterOverrides = parsed
+		case SettingErrorRules:
+			rules, err := health.CompileErrorRules(value, "group")
+			if err != nil {
+				return ResolvedGroupSettings{}, err
+			}
+			resolved.ErrorRules = rules
+		case SettingForcedModelRewrite:
+			rewrite, err := ParseForcedModelRewrite(key, value)
+			if err != nil {
+				return ResolvedGroupSettings{}, err
+			}
+			resolved.ForcedModelRewrite = rewrite
 		default:
 			return ResolvedGroupSettings{}, fmt.Errorf("unknown group setting %q", key)
 		}
@@ -474,6 +669,9 @@ func ResolveGroupRuntimeSettings(
 
 func ValidateRuntimeSetting(key string, value any) error {
 	switch key {
+	case SettingErrorRules:
+		_, err := health.CompileErrorRules(value, "global")
+		return err
 	case SettingFirstByteTimeout,
 		SettingRequestTimeout,
 		SettingStreamIdleTimeout,
@@ -525,6 +723,12 @@ func ValidateRuntimeSetting(key string, value any) error {
 	case SettingGlmWeekResetAnchorMS:
 		_, err := nonNegativeWholeNumber(key, value)
 		return err
+	case SettingModelQuotaWeights:
+		_, err := parseModelQuotaWeights(key, value)
+		return err
+	case SettingPlanQuotaCredits:
+		_, err := parsePlanQuotaCredits(key, value)
+		return err
 	case SettingRequestLogRetentionDays:
 		_, err := wholeNumberInRange(
 			key,
@@ -558,6 +762,66 @@ func strictBoolean(path string, value any) (bool, error) {
 		return false, fmt.Errorf("%s must be a boolean", path)
 	}
 	return parsed, nil
+}
+
+// settingJSONObject 把设置值统一为 JSON 对象; 接受 map[string]any(设置装载后)
+// 与 JSON 字符串(兼容 API 直传)。
+func settingJSONObject(path string, value any) (map[string]any, error) {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed, nil
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if trimmed == "" {
+			return map[string]any{}, nil
+		}
+		var object map[string]any
+		if err := json.Unmarshal([]byte(trimmed), &object); err != nil {
+			return nil, fmt.Errorf("%s must be a JSON object", path)
+		}
+		return object, nil
+	default:
+		return nil, fmt.Errorf("%s must be a JSON object", path)
+	}
+}
+
+// settingPositiveNumber 校验正数(支持小数), 供模型倍率使用。
+func settingPositiveNumber(path string, value any) (float64, error) {
+	weight, err := settingNonNegativeNumber(path, value)
+	if err != nil {
+		return 0, err
+	}
+	if weight <= 0 {
+		return 0, fmt.Errorf("%s must be a positive number", path)
+	}
+	return weight, nil
+}
+
+// settingNonNegativeNumber 校验非负数(允许小数, 上限 JSON 安全整数)。
+func settingNonNegativeNumber(path string, value any) (float64, error) {
+	limit, err := nonNegativeWholeNumber(path, value)
+	if err == nil {
+		return float64(limit), nil
+	}
+	switch typed := value.(type) {
+	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) || typed < 0 || typed > maxJSONSafeFloat {
+			return 0, fmt.Errorf("%s must be a non-negative number", path)
+		}
+		return typed, nil
+	case json.Number:
+		parsed, ok := new(big.Rat).SetString(typed.String())
+		if !ok || parsed.Sign() < 0 || !parsed.IsInt() && parsed.Denom().Cmp(big.NewInt(1_000_000)) > 0 {
+			return 0, fmt.Errorf("%s must be a non-negative number", path)
+		}
+		result, _ := parsed.Float64()
+		if result < 0 || result > maxJSONSafeFloat {
+			return 0, fmt.Errorf("%s must be a non-negative number", path)
+		}
+		return result, nil
+	default:
+		return 0, fmt.Errorf("%s must be a non-negative number", path)
+	}
 }
 
 func nonNegativeWholeNumber(path string, value any) (int, error) {

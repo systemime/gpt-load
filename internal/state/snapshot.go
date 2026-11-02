@@ -16,6 +16,7 @@ import (
 	"gpt-load/internal/channel"
 	"gpt-load/internal/connection"
 	"gpt-load/internal/execution"
+	"gpt-load/internal/health"
 	"gpt-load/internal/jev"
 	"gpt-load/internal/outboundproxy"
 	"gpt-load/internal/parameteroverride"
@@ -86,19 +87,20 @@ func externalModelName(model ModelConfig) string {
 }
 
 type AccessKeyConfig struct {
-	ConcurrencyLimit *int64
-	KeyPrefix        string
-	PriceMultiplier  *pricing.PriceMultiplier
-	ID               uint
-	Name             string
-	KeyHash          string
-	KeySuffix        string
-	Status           AccessKeyStatus
-	Filters          FilterSet
-	ExpiresAtMS      *int64
-	AllowedPeerCIDRs []netip.Prefix
-	RPMLimit         int64
-	CostLimitRules   []accessquota.Rule
+	ConcurrencyLimit  *int64
+	KeyPrefix         string
+	PriceMultiplier   *pricing.PriceMultiplier
+	ID                uint
+	Name              string
+	KeyHash           string
+	KeySuffix         string
+	Status            AccessKeyStatus
+	Filters           FilterSet
+	ExpiresAtMS       *int64
+	AllowedPeerCIDRs  []netip.Prefix
+	RPMLimit          int64
+	CostLimitRules    []accessquota.Rule
+	RecordRequestBody bool
 }
 
 type AccessKeyStatus string
@@ -112,6 +114,8 @@ type FilterSet struct {
 	Groups    map[uint]struct{}
 	Protocols map[protocol.Protocol]struct{}
 	Models    map[string]struct{}
+	// ForcedModelRewrite 密钥级强制改写(请求模型命中键即改写到目标), 可为空。
+	ForcedModelRewrite ForcedModelRewrite
 }
 
 type RouteTarget struct {
@@ -153,6 +157,8 @@ func (rules HeaderRules) ConfiguredNames() []string {
 }
 
 type GroupView struct {
+	ErrorRules                health.ErrorRules
+	ForcedModelRewrite        ForcedModelRewrite
 	Priority                  int32
 	ConcurrencyLimit          int64
 	PriceMultiplier           pricing.PriceMultiplier
@@ -189,27 +195,40 @@ type GroupCatalogView struct {
 }
 
 type AccessKeyView struct {
-	ConcurrencyLimit *int64
-	KeyPrefix        string
-	PriceMultiplier  pricing.PriceMultiplier
-	ID               uint
-	Name             string
-	KeySuffix        string
-	Status           AccessKeyStatus
-	Filters          FilterSet
-	ExpiresAtMS      *int64
-	AllowedPeerCIDRs []netip.Prefix
-	RPMLimit         int64
-	CostLimitRules   []accessquota.Rule
+	ConcurrencyLimit  *int64
+	KeyPrefix         string
+	PriceMultiplier   pricing.PriceMultiplier
+	ID                uint
+	Name              string
+	KeySuffix         string
+	Status            AccessKeyStatus
+	Filters           FilterSet
+	ExpiresAtMS       *int64
+	AllowedPeerCIDRs  []netip.Prefix
+	RPMLimit          int64
+	CostLimitRules    []accessquota.Rule
+	RecordRequestBody bool
+}
+
+// ForcedModelRewriteFor 返回密钥级改写目标(未启用或未命中返回空)。
+func (view AccessKeyView) ForcedModelRewriteFor(model string) string {
+	rewrite := view.Filters.ForcedModelRewrite
+	if !rewrite.Enabled {
+		return ""
+	}
+	return rewrite.Mappings[model]
 }
 
 type ConfigSnapshot struct {
-	RequestRedaction      *requestredact.Compiled
-	Jev                   jev.Config
-	RequestAudit          requestaudit.Config
-	AutoModels            *automodel.Compiled
-	Revision              uint64
-	Settings              RuntimeSettings
+	RequestRedaction *requestredact.Compiled
+	Jev              jev.Config
+	RequestAudit     requestaudit.Config
+	AutoModels       *automodel.Compiled
+	Revision         uint64
+	Settings         RuntimeSettings
+	// ModelQuotaWeights 是生效权重表(内置默认 + 设置覆盖, 编译期合并, 恒非 nil)。
+	// 准入槽位与配额折算共用; 手工构造快照未赋值时各消费方回退内置表。
+	ModelQuotaWeights     map[string]float64
 	ExecutionCandidates   ExecutionCandidateIndex
 	ExecutionRouteCatalog ExecutionCandidateIndex
 	Groups                map[uint]GroupView
@@ -218,6 +237,16 @@ type ConfigSnapshot struct {
 	AccessKeysByID        map[uint]AccessKeyView
 	ClientModelOverrides  map[string]catalog.ClientModelOverrides
 	GlobalProxy           outboundproxy.Effective
+}
+
+// PlanQuotaCredits 返回套餐额度: plan_quota_credits 设置覆盖优先, 否则内置数值。
+func (snapshot *ConfigSnapshot) PlanQuotaCredits(plan GlmCodingPlan) (credits5h, credits7d float64) {
+	if snapshot != nil && snapshot.Settings.PlanQuotaCredits != nil {
+		if override, ok := snapshot.Settings.PlanQuotaCredits[string(plan)]; ok {
+			return override.Credits5h, override.Credits7d
+		}
+	}
+	return plan.Quota()
 }
 
 func Compile(input CompileInput) (*ConfigSnapshot, error) {
@@ -317,6 +346,7 @@ func Compile(input CompileInput) (*ConfigSnapshot, error) {
 		Jev:              shared, RequestAudit: audit,
 		AutoModels:            autoModels,
 		Settings:              runtimeSettings,
+		ModelQuotaWeights:     EffectiveModelQuotaWeights(runtimeSettings.ModelQuotaWeights),
 		ExecutionCandidates:   make(ExecutionCandidateIndex),
 		ExecutionRouteCatalog: make(ExecutionCandidateIndex),
 		Groups:                make(map[uint]GroupView),
@@ -336,12 +366,13 @@ func Compile(input CompileInput) (*ConfigSnapshot, error) {
 			WeightManual:   cloneWeight(group.WeightManual),
 		}
 		snapshot.GroupCatalog[group.ID] = catalogView
-		if err := appendExecutionTargets(snapshot.ExecutionRouteCatalog, input.ChannelRegistry, group); err != nil {
-			return nil, err
-		}
 		resolved, err := ResolveGroupRuntimeSettings(runtimeSettings, group.Settings)
 		if err != nil {
 			return nil, fmt.Errorf("compile group %d settings: %w", group.ID, err)
+		}
+		forcedRewrite := effectiveForcedRewriteMappings(resolved.ForcedModelRewrite, group.Models)
+		if err := appendExecutionTargets(snapshot.ExecutionRouteCatalog, input.ChannelRegistry, group, forcedRewrite); err != nil {
+			return nil, err
 		}
 		groupProxy, err := outboundproxy.Resolve(nil, group.Proxy, input.GlobalProxy, input.EnvironmentProxy)
 		if err != nil {
@@ -352,6 +383,8 @@ func Compile(input CompileInput) (*ConfigSnapshot, error) {
 		}
 
 		view := GroupView{
+			ErrorRules:                resolved.ErrorRules,
+			ForcedModelRewrite:        resolved.ForcedModelRewrite,
 			Priority:                  group.Priority,
 			PriceMultiplier:           resolvePriceMultiplier(group.PriceMultiplier),
 			ID:                        group.ID,
@@ -385,7 +418,7 @@ func Compile(input CompileInput) (*ConfigSnapshot, error) {
 		view.Params = params.CanonicalJSON()
 		view.ResolvedTarget = cloneResolvedTarget(target)
 		view.ClientProtocols = append([]protocol.Protocol(nil), descriptor.ClientProtocols...)
-		if err := appendExecutionTargets(snapshot.ExecutionCandidates, input.ChannelRegistry, group); err != nil {
+		if err := appendExecutionTargets(snapshot.ExecutionCandidates, input.ChannelRegistry, group, forcedRewrite); err != nil {
 			return nil, err
 		}
 		snapshot.Groups[group.ID] = view
@@ -417,14 +450,15 @@ func newAccessKeyView(input AccessKeyConfig) AccessKeyView {
 	return AccessKeyView{
 		PriceMultiplier: resolvePriceMultiplier(input.PriceMultiplier),
 		ID:              input.ID, Name: input.Name, Status: input.Status,
-		KeySuffix:        input.KeySuffix,
-		KeyPrefix:        input.KeyPrefix,
-		Filters:          cloneFilterSet(input.Filters),
-		ExpiresAtMS:      cloneAccessKeyExpiry(input.ExpiresAtMS),
-		AllowedPeerCIDRs: cloneAllowedPeerCIDRs(input.AllowedPeerCIDRs),
-		RPMLimit:         input.RPMLimit,
-		ConcurrencyLimit: cloneAccessKeyExpiry(input.ConcurrencyLimit),
-		CostLimitRules:   rules,
+		KeySuffix:         input.KeySuffix,
+		KeyPrefix:         input.KeyPrefix,
+		Filters:           cloneFilterSet(input.Filters),
+		ExpiresAtMS:       cloneAccessKeyExpiry(input.ExpiresAtMS),
+		AllowedPeerCIDRs:  cloneAllowedPeerCIDRs(input.AllowedPeerCIDRs),
+		RPMLimit:          input.RPMLimit,
+		ConcurrencyLimit:  cloneAccessKeyExpiry(input.ConcurrencyLimit),
+		CostLimitRules:    rules,
+		RecordRequestBody: input.RecordRequestBody,
 	}
 }
 
@@ -447,6 +481,7 @@ func appendExecutionTargets(
 	index ExecutionCandidateIndex,
 	registry *channel.Registry,
 	group GroupConfig,
+	forcedRewrite map[string]string,
 ) error {
 	target, err := registry.Resolve(group.ChannelID, group.Params)
 	if err != nil {
@@ -531,7 +566,80 @@ func appendExecutionTargets(
 			}
 		}
 	}
+	applyForcedModelRewrite(index, group.ID, target, forcedRewrite)
 	return nil
+}
+
+// applyForcedModelRewrite 把强制改写落到路由索引: 键为源模型的条目整体替换为
+// 指向目标模型的路由目标(报文/响应/冷却/用量由执行层按 UpstreamModelID 自动跟随)。
+// from/to 不在分组模型里的条目在编译期已被过滤, 这里再防御一次 Mode 缺失。
+func applyForcedModelRewrite(
+	index ExecutionCandidateIndex,
+	groupID uint,
+	target channel.ResolvedTarget,
+	forcedRewrite map[string]string,
+) {
+	if len(forcedRewrite) == 0 {
+		return
+	}
+	for clientProtocol, byOperation := range index {
+		for operation, bucketByModel := range byOperation {
+			for from, to := range forcedRewrite {
+				bucket := bucketByModel[from]
+				if len(bucket) == 0 {
+					continue
+				}
+				modelMode, supported := target.ModeForModel(clientProtocol, operation, to)
+				if !supported {
+					continue
+				}
+				rewritten := make([]RouteTarget, 0, len(bucket))
+				replaced := false
+				for _, route := range bucket {
+					if route.UpstreamModelID != from {
+						rewritten = append(rewritten, route)
+						continue
+					}
+					if replaced {
+						continue
+					}
+					rewritten = append(rewritten, RouteTarget{
+						GroupID: groupID, UpstreamModelID: to,
+						Mode: modelMode, ResolvedTarget: cloneResolvedTarget(target),
+					})
+					replaced = true
+				}
+				bucketByModel[from] = rewritten
+			}
+		}
+	}
+}
+
+// effectiveForcedRewriteMappings 过滤强制改写表: from/to 都必须是分组配置的
+// 外部模型名(Alias 优先); 未启用返回 nil。分组删除模型后残留条目自动失效。
+func effectiveForcedRewriteMappings(rewrite ForcedModelRewrite, models []ModelConfig) map[string]string {
+	mappings := rewrite.EffectiveForcedMappings()
+	if len(mappings) == 0 {
+		return nil
+	}
+	known := make(map[string]struct{}, len(models))
+	for _, model := range models {
+		known[externalModelName(model)] = struct{}{}
+	}
+	filtered := make(map[string]string, len(mappings))
+	for from, to := range mappings {
+		if _, ok := known[from]; !ok {
+			continue
+		}
+		if _, ok := known[to]; !ok {
+			continue
+		}
+		filtered[from] = to
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return filtered
 }
 
 func appendExecutionTarget(
@@ -758,6 +866,13 @@ func cloneFilterSet(source FilterSet) FilterSet {
 		cloned.Models = make(map[string]struct{}, len(source.Models))
 		for model := range source.Models {
 			cloned.Models[model] = struct{}{}
+		}
+	}
+	if source.ForcedModelRewrite.Mappings != nil {
+		cloned.ForcedModelRewrite.Enabled = source.ForcedModelRewrite.Enabled
+		cloned.ForcedModelRewrite.Mappings = make(map[string]string, len(source.ForcedModelRewrite.Mappings))
+		for from, to := range source.ForcedModelRewrite.Mappings {
+			cloned.ForcedModelRewrite.Mappings[from] = to
 		}
 	}
 	return cloned

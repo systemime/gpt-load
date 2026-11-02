@@ -65,6 +65,10 @@ export type RuntimeSettings = Partial<
   header_rules?: HeaderRules
   parameter_overrides?: ParameterRule[]
   error_rules?: ErrorRule[]
+  forced_model_rewrite?: {
+    enabled: boolean
+    mappings: Record<string, string>
+  }
 }
 export interface GroupSettings extends GroupBasics {
   defaultErrorRules: ErrorRule[]

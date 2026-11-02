@@ -96,8 +96,10 @@ func BuildContainer() (*dig.Container, error) {
 			quotaRuntime *accessquota.Runtime,
 			subscriptionCredentials *subscription.CredentialManager,
 			rpmStore *rpm.Store,
+			manager *state.Manager,
 		) *requestlog.Service {
 			service := requestlog.NewService(db, redactor, retention, quotaRuntime)
+			service.SetQuotaWeightsProvider(quotaWeightsSnapshotProvider{manager: manager})
 			service.SetPassiveQuotaFlusher(subscriptionCredentials)
 			service.SetRPMStore(rpmStore)
 			return service
@@ -202,6 +204,7 @@ func BuildContainer() (*dig.Container, error) {
 		newSubscriptionRuntime,
 		subscription.NewCredentialManager,
 		cpaexecutor.NewAdapter,
+		subscriptionproviders.NewModelCatalogUpdater,
 		newProviderAdapterRegistry,
 		func(registry *provideradapter.Registry) execution.Executor { return registry },
 		func(runtime *bifrostexecutor.RuntimeManager) app.ExecutionRuntime { return runtime },

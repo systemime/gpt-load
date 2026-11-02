@@ -36,9 +36,11 @@ ARG TARGETARCH
 # modernc 纯 Go 移植的 WAL 在多进程下会产生 malformed/损坏 (#171/#83)。
 # 注意: CGO 交叉编译需构建机与目标机同架构(当前 amd64→amd64); 异构目标需换 musl 交叉工具链。
 # GOPROXY 使用竖线分隔：任何错误（含网络错误）都回退到下一个源。
+# GOTOOLCHAIN=auto: go.mod 的 go 指令高于基础镜像时按需经 GOPROXY 拉取工具链。
 ENV GO111MODULE=on \
     CGO_ENABLED=1 \
-    GOPROXY="https://proxy.golang.org|direct"
+    GOTOOLCHAIN=auto \
+    GOPROXY="https://goproxy.cn|https://proxy.golang.org|direct"
 RUN apk add --no-cache gcc musl-dev
 
 WORKDIR /build

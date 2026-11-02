@@ -10,22 +10,30 @@ import (
 	"gpt-load/internal/state"
 )
 
+// QuotaWeightsProvider 提供生效的模型倍率表(快照编译产物); nil 表回退内置默认。
+type QuotaWeightsProvider interface {
+	ModelQuotaWeights() map[string]float64
+}
+
 // quotaTokenMultiplierSQL 生成稳定的 CASE 倍率表达式: 同倍数模型合并一个分支。
-// 权重表取 state.ModelQuotaWeights(与并发槽位占用共用), 在聚合 SQL 内联求值,
+// 权重表取生效模型倍率(与并发槽位占用共用), 在聚合 SQL 内联求值,
 // 与 glmCreditCoefficientSQL 同套路, 不产生额外扫描。
-func quotaTokenMultiplierSQL() string {
-	weights := make([]float64, 0, 4)
+func quotaTokenMultiplierSQL(weights map[string]float64) string {
+	if weights == nil {
+		weights = state.ModelQuotaWeights
+	}
+	entries := make([]float64, 0, 4)
 	byWeight := make(map[float64][]string, 4)
-	for modelName, weight := range state.ModelQuotaWeights {
+	for modelName, weight := range weights {
 		if _, seen := byWeight[weight]; !seen {
-			weights = append(weights, weight)
+			entries = append(entries, weight)
 		}
 		byWeight[weight] = append(byWeight[weight], modelName)
 	}
-	sort.Float64s(weights)
+	sort.Float64s(entries)
 	var builder strings.Builder
 	builder.WriteString("(CASE ")
-	for _, weight := range weights {
+	for _, weight := range entries {
 		modelNames := byWeight[weight]
 		sort.Strings(modelNames)
 		quoted := make([]string, 0, len(modelNames))
@@ -135,10 +143,10 @@ func (service *Service) appendWindowUsage(
 		Table(subquery).
 		Select(`credential_id,
 SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN 1 ELSE 0 END) AS requests_5h,
-CAST(SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN (uncached_input_tokens + output_tokens) * `+quotaTokenMultiplierSQL()+` ELSE 0 END) AS INTEGER) AS tokens_5h,
+CAST(SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN (uncached_input_tokens + output_tokens) * `+quotaTokenMultiplierSQL(service.currentQuotaWeights())+` ELSE 0 END) AS INTEGER) AS tokens_5h,
 CAST(SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN uncached_input_tokens + output_tokens ELSE 0 END) AS INTEGER) AS raw_tokens_5h,
 SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN 1 ELSE 0 END) AS requests_7d,
-CAST(SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN (uncached_input_tokens + output_tokens) * `+quotaTokenMultiplierSQL()+` ELSE 0 END) AS INTEGER) AS tokens_7d,
+CAST(SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN (uncached_input_tokens + output_tokens) * `+quotaTokenMultiplierSQL(service.currentQuotaWeights())+` ELSE 0 END) AS INTEGER) AS tokens_7d,
 CAST(SUM(CASE WHEN source = 1 AND completed_at_ms > ? THEN uncached_input_tokens + output_tokens ELSE 0 END) AS INTEGER) AS raw_tokens_7d,
 SUM(CASE WHEN source = 2 AND completed_at_ms > ? THEN `+glmCreditCoefficientSQL+` ELSE 0 END) AS credits_5h,
 SUM(CASE WHEN source = 2 THEN `+glmCreditCoefficientSQL+` ELSE 0 END) AS credits_7d`,

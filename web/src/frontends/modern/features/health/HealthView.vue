@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { useMobileLayout } from '@modern/app/use-mobile-layout'
-import { SlidersHorizontal, ChevronRight } from '@lucide/vue'
+import { SlidersHorizontal, ChevronRight, FlaskConical } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { useQuery } from '@tanstack/vue-query'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import {
   ArrowUpRight,
   Eye,
@@ -15,6 +15,11 @@ import {
   ShieldCheck,
   UserRound,
 } from '@lucide/vue'
+import {
+  restoreTestedCredential,
+  runCredentialAction,
+  testCredentialAccess,
+} from '@modern/api/credential-actions'
 import { getHealth } from '@modern/api/health'
 import { getGroupWorkspace, groupQueryKey } from '@modern/api/groups'
 import { useApiClient } from '@shared/http/client-context'
@@ -31,6 +36,7 @@ import {
   AppIcon,
   AppIconButton,
   AppListFrame,
+  AppNotice,
   AppOverflowText,
   AppPagination,
   AppSearchSelect,
@@ -65,6 +71,7 @@ const mobileFilterCount = computed(
 )
 const mobileFilters = ref(false)
 const client = useApiClient()
+const cache = useQueryClient()
 const state = useURLState(healthStateKeys, parseHealthState, serializeHealthState)
 const query = useQuery({
   queryKey: ['modern', 'health'],
@@ -206,6 +213,66 @@ function logs(issue: HealthIssue): void {
 function manage(issue: HealthIssue): void {
   void router.push(healthManageLocation(issue))
 }
+// 测试访问: 对冷却/拉黑凭证跑一次真实探活; 通过则凭证明恢复入池(黑名单),
+// 仅冷却中的凭证走手动恢复路径。失败保持原状态, 冷却不受影响。
+const accessTestKey = ref('')
+const accessTestNotice = ref<{ tone: 'success' | 'warning' | 'danger'; text: string } | null>(null)
+function testableCredential(issue: HealthIssue): boolean {
+  return issue.identityType === 'credential' && !!issue.groupID && !!issue.credentialID
+}
+async function testAccess(issue: HealthIssue): Promise<void> {
+  if (!issue.groupID || !issue.credentialID || accessTestKey.value) return
+  accessTestKey.value = issue.key
+  accessTestNotice.value = null
+  const controller = new AbortController()
+  try {
+    const result = await testCredentialAccess(
+      client,
+      issue.groupID,
+      issue.credentialID,
+      controller.signal,
+    )
+    if (result.outcome !== 'passed') {
+      const detail = result.reason ? `：${result.reason}` : ''
+      accessTestNotice.value = {
+        tone: result.outcome === 'inconclusive' ? 'warning' : 'danger',
+        text: t('health.testAccessFailed', { reason: detail }),
+      }
+      return
+    }
+    try {
+      if (result.proof)
+        await restoreTestedCredential(
+          client,
+          issue.groupID,
+          issue.credentialID,
+          result.proof,
+          controller.signal,
+        )
+      else
+        await runCredentialAction(
+          client,
+          issue.groupID,
+          issue.credentialID,
+          'restore',
+          controller.signal,
+        )
+    } catch {
+      accessTestNotice.value = {
+        tone: 'warning',
+        text: t('health.testAccessRestoreFailed'),
+      }
+      return
+    }
+    accessTestNotice.value = { tone: 'success', text: t('health.testAccessRestored') }
+    await cache.invalidateQueries({ queryKey: ['modern', 'health'] })
+    await refresh()
+  } catch {
+    accessTestNotice.value = { tone: 'danger', text: t('health.testAccessError') }
+  } finally {
+    accessTestKey.value = ''
+  }
+}
 async function refresh(): Promise<void> {
   await Promise.all([query.refetch(), groups.refetch()])
 }
@@ -293,6 +360,14 @@ useMessageSource(() =>
         <AppFilterSummary :items="summary" @remove="reset" @reset="reset()" />
       </div>
     </div>
+    <AppNotice
+      v-if="accessTestNotice"
+      inline
+      :tone="accessTestNotice.tone"
+      dismissible
+      @dismiss="accessTestNotice = null"
+      >{{ accessTestNotice.text }}</AppNotice
+    >
     <AppListFrame
       ref="frame"
       mobile-flow
@@ -412,6 +487,16 @@ useMessageSource(() =>
             </div>
             <div class="modern-health-actions">
               <AppIconButton
+                v-if="testableCredential(row)"
+                :icon="FlaskConical"
+                :label="accessTestKey === row.key ? t('health.testAccessRunning') : t('health.testAccess')"
+                :tooltip="true"
+                size="xs"
+                variant="text"
+                :loading="accessTestKey === row.key"
+                :disabled="accessTestKey !== '' && accessTestKey !== row.key"
+                @click="testAccess(row)"
+              /><AppIconButton
                 :icon="Eye"
                 :label="t('health.details')"
                 :tooltip="true"

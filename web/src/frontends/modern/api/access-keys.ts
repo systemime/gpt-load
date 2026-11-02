@@ -11,6 +11,7 @@ export interface AccessScope {
   protocols: string[]
   models: string[]
   allowed_cidrs: string[]
+  forced_model_rewrite?: { enabled: boolean; mappings: Record<string, string> }
 }
 export interface CostRule {
   id?: number
@@ -112,6 +113,14 @@ function readWindow(value: unknown): CostWindow {
     window_ends_at_ms: timestamp(row.window_ends_at_ms),
   }
 }
+function readRewrite(value: unknown): AccessScope['forced_model_rewrite'] {
+  if (value == null) return undefined
+  const row = record(value)
+  const mappings = record(row.mappings ?? {})
+  const entries: Record<string, string> = {}
+  for (const [from, to] of Object.entries(mappings)) entries[from] = text(to)
+  return { enabled: boolean(row.enabled), mappings: entries }
+}
 function readAccessKey(value: unknown): AccessKey {
   const row = record(value)
   const scope = record(row.filters)
@@ -126,6 +135,7 @@ function readAccessKey(value: unknown): AccessKey {
       protocols: sortProtocols(list(scope.protocols).map(text)),
       models: list(scope.models).map(text),
       allowed_cidrs: list(scope.allowed_cidrs).map(text),
+      forced_model_rewrite: readRewrite(scope.forced_model_rewrite),
     },
     expires_at_ms: timestamp(row.expires_at_ms),
     concurrency_limit: row.concurrency_limit == null ? null : integer(row.concurrency_limit),

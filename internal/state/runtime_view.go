@@ -30,6 +30,11 @@ func (view CredentialRuntimeView) ObservedQuotaRemaining() *float64 {
 	return cloneFloat(view.QuotaRemaining)
 }
 
+// RuntimeView 合并不同原因的冷却，供管理面使用同一份健康投影。
+func (entry CredentialEntry) RuntimeView() CredentialRuntimeView {
+	return runtimeView(&entry)
+}
+
 type CredentialRuntimeState string
 
 const (
@@ -62,8 +67,8 @@ func runtimeView(entry *CredentialEntry) CredentialRuntimeView {
 		ConcurrencyLimit:   cloneWeight(entry.ConcurrencyLimit),
 		Status:             entry.Status,
 		AuthState:          entry.AuthState.normalize(),
-		CooldownUntil:      entry.CooldownUntil,
-		ModelCooldowns:     cloneModelCooldowns(entry.ModelCooldowns),
+		CooldownUntil:      effectiveCooldownUntil(entry),
+		ModelCooldowns:     effectiveModelCooldowns(entry),
 		Blacklisted:        entry.Blacklisted,
 		FailureCount:       entry.FailureCount,
 		QuotaRemaining:     cloneFloat(entry.quotaRemaining),
