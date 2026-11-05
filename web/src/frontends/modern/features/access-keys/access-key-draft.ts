@@ -143,7 +143,16 @@ function buildRewrite(
 }
 function scopeJSON(scope: AccessScope): string {
   return JSON.stringify(
-    Object.fromEntries(Object.entries(scope).map(([key, values]) => [key, [...values].sort()])),
+    Object.fromEntries(
+      Object.entries(scope).map(([key, values]) => [
+        key,
+        key === 'forced_model_rewrite'
+          ? values
+            ? JSON.stringify(values)
+            : ''
+          : [...values].sort(),
+      ]),
+    ),
   )
 }
 const ruleJSON = (rules: CostRule[]) =>
