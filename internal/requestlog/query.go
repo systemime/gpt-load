@@ -235,10 +235,12 @@ func applyAttemptFilters(query *gorm.DB, input ListQuery) *gorm.DB {
 	if len(conditions) == 0 {
 		return query
 	}
-	statement := `EXISTS (
-		SELECT 1 FROM request_log_attempts AS attempt
-		WHERE attempt.request_id = request_logs.id AND ` +
-		strings.Join(conditions, " AND ") + `
+	// IN 子查询先独立求值一次; 相关子查询(CORRELATED EXISTS)在 SQLite 里会被
+	// 计划成对每个 request_logs 行按单列索引回扫全部匹配 attempt, 17 万行日志下
+	// count 直接跑到分钟级并占满一个 CPU 核。
+	statement := `request_logs.id IN (
+		SELECT attempt.request_id FROM request_log_attempts AS attempt
+		WHERE ` + strings.Join(conditions, " AND ") + `
 	)`
 	return query.Where(statement, arguments...)
 }
