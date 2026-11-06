@@ -67,6 +67,7 @@ export const zhCN = {
     credential_queue_enabled: '超出组预算排队',
     credential_queue_timeout: '排队等待上限',
     credential_usage_balance_enabled: '用量均衡',
+    model_quota_weights: '模型并发占用倍率',
     empty_response_retry: '空回检测',
     responses_websocket_enabled: 'Responses WebSocket',
     proxy_config: '上游代理',
@@ -89,6 +90,8 @@ export const zhCN = {
     default_group_concurrency_limit: '每个分组独立继承此值；分组可单独覆盖。0 表示不限。',
     codex_live_mode:
       '分组可覆盖此默认值。直连要求客户端能访问上游；中继需要配置公网媒体地址及 UDP 端口。关闭仅停用语音。',
+    model_quota_weights:
+      '调整模型请求占用的并发槽数（0.5–3，步进 0.5）。例如 glm-5.3 设 1 可让单凭证容纳双倍请求。改后即时生效。',
     request_redaction: '配置发送给上游与 JEV 的文本脱敏规则',
     jev: '自动模型与语义审计共用。请求文本会发送到所选分组；语义审计需要明确指定分组。',
     request_audit: '使用 JEV 按自定义规则拦截或告警。',
@@ -260,7 +263,8 @@ export const enUS = {
     credential_queue_enabled: 'Queue beyond group budget',
     credential_queue_timeout: 'Queue wait limit',
     credential_usage_balance_enabled: 'Usage balance',
-    empty_response_retry: 'Empty response detection',
+    model_quota_weights: 'Model slot weight',
+    request_redaction_hint_guard: '',
     responses_websocket_enabled: 'Responses WebSocket',
     proxy_config: 'Upstream proxy',
     first_byte_timeout: 'Response / first stream event timeout',
@@ -285,6 +289,8 @@ export const enUS = {
 
     codex_live_mode:
       'Groups can override this default. Direct mode requires client access to upstream media. Relay mode requires a reachable media IP and UDP ports. Off disables voice only.',
+    model_quota_weights:
+      'Adjust how many concurrency slots a model request occupies (0.5–3, steps of 0.5). E.g. setting glm-5.3 to 1 doubles per-credential capacity. Applies immediately.',
     request_redaction: 'Configure text redaction for upstream providers and JEV',
     jev: 'Used by automatic models and semantic auditing. Request text is sent to this route; semantic auditing requires an explicit group.',
     request_audit: 'Use JEV to block or warn on custom rules.',
@@ -462,6 +468,7 @@ export const jaJP = {
     credential_queue_enabled: 'グループ予算超過時のキューイング',
     credential_queue_timeout: 'キュー待機上限',
     credential_usage_balance_enabled: '使用量バランス',
+    model_quota_weights: 'モデルスロット倍率',
     empty_response_retry: '空応答の検出',
     responses_websocket_enabled: 'Responses WebSocket',
     proxy_config: '上流プロキシ',
@@ -487,6 +494,8 @@ export const jaJP = {
 
     codex_live_mode:
       'グループで既定値を上書きできます。直接接続はクライアントから上流への通信が必要です。中継には到達可能なメディア IP と UDP ポートが必要です。無効にしてもテキストは利用できます。',
+    model_quota_weights:
+      'モデルのリクエストが占める同時実行スロットを調整します（0.5〜3、0.5 刻み）。例: glm-5.3 を 1 にすると各認証情報の収容力が 2 倍に。変更は即時反映。',
     request_redaction: '上流と JEV に送信するテキストのマスキングルールを設定',
     jev: '自動モデルと意味監査で共用します。リクエスト本文を選択したグループに送信します。意味監査にはグループの指定が必要です。',
     request_audit: 'JEV が独自ルールでブロックまたは警告します。',

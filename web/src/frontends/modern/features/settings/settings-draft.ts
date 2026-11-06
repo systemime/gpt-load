@@ -62,8 +62,26 @@ export type SettingsDraft = Record<SettingNumber, string> &
     request_redaction: RedactionRule[]
     request_audit: AuditConfig
     error_rules: ErrorRule[]
+    model_quota_weights: ModelQuotaWeightRow[]
   }
 let nextHeader = 0
+let nextWeightRow = 0
+export const modelQuotaWeightOptions = ['0.5', '1', '1.5', '2', '2.5', '3'] as const
+export interface ModelQuotaWeightRow {
+  id: number
+  model: string
+  weight: string
+}
+export function validModelQuotaWeights(rows: ModelQuotaWeightRow[]): boolean {
+  const seen = new Set<string>()
+  for (const row of rows) {
+    const model = row.model.trim()
+    if (!model || seen.has(model)) return false
+    if (!(modelQuotaWeightOptions as readonly string[]).includes(row.weight)) return false
+    seen.add(model)
+  }
+  return true
+}
 export function newHeader(): HeaderRow {
   return { id: nextHeader++, action: 'set', name: '', value: '' }
 }
@@ -98,6 +116,11 @@ export function createSettingsDraft(data: SettingsData): SettingsDraft {
     request_audit: cloneDraft(values.request_audit),
     request_redaction: cloneDraft(values.request_redaction),
     error_rules: cloneErrorRules(values.error_rules),
+    model_quota_weights: Object.entries(values.model_quota_weights).map(([model, weight]) => ({
+      id: nextWeightRow++,
+      model,
+      weight: String(weight),
+    })),
     cors: {
       ...values.cors,
       allowed_origins: values.cors.allowed_origins.join('\n'),
@@ -281,6 +304,8 @@ export function settingsErrors(
     if (key === 'auto_model' && !validAutoDraft(draft.auto_model)) errors.auto_model = 'autoModel'
     if (key === 'error_rules' && !validErrorRules(draft.error_rules))
       errors.error_rules = 'errorRules'
+    if (key === 'model_quota_weights' && !validModelQuotaWeights(draft.model_quota_weights))
+      errors.model_quota_weights = 'modelQuota'
     if (key in settingNumbers) {
       const number = key as SettingNumber
       const rule = settingNumbers[number]

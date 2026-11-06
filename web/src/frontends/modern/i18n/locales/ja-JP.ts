@@ -30,6 +30,17 @@ import { jaJP as subscriptions } from './subscriptions'
 export default {
   credentialBatchTest: credentialTestMessages['ja-JP'],
   errorRules: errorRuleMessages['ja-JP'],
+  modelQuota: {
+    title: 'モデルスロット倍率',
+    model: 'モデル',
+    weight: '占有スロット',
+    add: '追加',
+    remove: '削除',
+    empty: '項目がありません。追加すると対象モデルのリクエストが倍率に応じてスロットを占有します。',
+    invalidModel: 'モデル名は必須で重複できません',
+    invalidRows: '未入力または重複する項目があります',
+    settingsHint: 'モデルのリクエストが占めるスロットを調整します（0.5〜3、0.5 刻み）。保存すると即時反映',
+  },
   proxies,
   concurrency,
   requestRedaction,

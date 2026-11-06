@@ -8,11 +8,13 @@ import (
 )
 
 // CredentialSlots 统计每个凭证的实时在途占用(按模型槽位权重加权, 见 SlotWeight),
-// 并按全局 cap 做准入控制。cap 来源于 credential_concurrency_limit 运行时设置;
+// 并按全局 cap 做准入控制。内部以 SlotUnitScale 半槽为单位记账, 支持模型倍率
+// 0.5 步进; 对外展示(Inflight/EffectiveLimit/Capacity)换算回真实槽数。cap 来源于 credential_concurrency_limit 运行时设置;
 // 0 表示不限制。计数器而非信号量: cap 变更只改阈值, 在途请求自然排空,
 // 无重建与释放配对问题。acquire/release 必须传同一权重, 否则计数漂移。
 type CredentialSlots struct {
-	capacity atomic.Int64 // 全局默认 cap, <=0 表示不限制
+	capacity atomic.Int64 // 全局默认 cap(内部单位), <=0 表示不限制
+	scale    int64        // 每真实槽对应的内部单位数(半槽步进=2; 测试可设 1)
 	mu       sync.RWMutex
 	counters map[uint]*atomic.Int64
 	waiting  map[uint]*atomic.Int64
@@ -21,13 +23,23 @@ type CredentialSlots struct {
 }
 
 func NewCredentialSlots(capacity int) *CredentialSlots {
+	return NewCredentialSlotsWithScale(capacity, SlotUnitScale)
+}
+
+// NewCredentialSlotsWithScale 以指定记账单位创建: scale=2 半槽步进(生产),
+// scale=1 整数槽(测试保持直观数字)。
+func NewCredentialSlotsWithScale(capacity int, scale int64) *CredentialSlots {
+	if scale < 1 {
+		scale = 1
+	}
 	slots := &CredentialSlots{
+		scale:    scale,
 		counters: make(map[uint]*atomic.Int64),
 		waiting:  make(map[uint]*atomic.Int64),
 		limits:   make(map[uint]int64),
 		notify:   make(chan struct{}),
 	}
-	slots.capacity.Store(int64(capacity))
+	slots.capacity.Store(int64(capacity) * scale)
 	return slots
 }
 
@@ -37,18 +49,19 @@ func (slots *CredentialSlots) Configure(capacity int) {
 	if slots == nil {
 		return
 	}
-	slots.capacity.Store(int64(capacity))
+	slots.capacity.Store(int64(capacity) * slots.scale)
 }
 
+// Capacity 返回用户口径的 cap(真实槽数)。
 func (slots *CredentialSlots) Capacity() int {
 	if slots == nil {
 		return 0
 	}
-	return int(slots.capacity.Load())
+	return int(slots.capacity.Load() / slots.scale)
 }
 
-// SetLimits 整表替换每凭证 cap 覆盖(仅保留 >0 项)。注册表在
-// ReplaceCredentials 时同步, 与凭证增删一致。
+// SetLimits 整表替换每凭证 cap 覆盖(仅保留 >0 项, 用户口径真实槽数)。
+// 注册表在 ReplaceCredentials 时同步, 与凭证增删一致。
 func (slots *CredentialSlots) SetLimits(limits map[uint]int64) {
 	if slots == nil {
 		return
@@ -64,7 +77,7 @@ func (slots *CredentialSlots) SetLimits(limits map[uint]int64) {
 	slots.mu.Unlock()
 }
 
-// limitFor 返回该凭证生效的 cap: 覆盖 > 0 时覆盖全局, 否则用全局值。
+// limitFor 返回该凭证生效 cap 的内部半槽单位数。
 func (slots *CredentialSlots) limitFor(id uint) int64 {
 	if slots == nil {
 		return 0
@@ -73,23 +86,42 @@ func (slots *CredentialSlots) limitFor(id uint) int64 {
 	override := slots.limits[id]
 	slots.mu.RUnlock()
 	if override > 0 {
-		return override
+		return override * slots.scale
 	}
 	return slots.capacity.Load()
 }
 
-// BudgetFor 返回该凭证的预算档 = 生效 cap + 固定浮动; 不限时为极大值。
+// BudgetFor 返回该凭证的预算档 = 生效 cap + 固定浮动(内部单位); 不限时为极大值。
 func (slots *CredentialSlots) BudgetFor(id uint) int64 {
 	limit := slots.limitFor(id)
 	if limit <= 0 {
 		return math.MaxInt64
 	}
-	return limit + CredentialQueueSlack
+	return limit + CredentialQueueSlack*slots.scale
 }
 
-// EffectiveLimit 返回该凭证生效 cap, 供展示。
+// EffectiveLimit 返回该凭证生效 cap(真实槽数), 供展示与负载分。
 func (slots *CredentialSlots) EffectiveLimit(id uint) int64 {
-	return slots.limitFor(id)
+	return slots.limitFor(id) / slots.scale
+}
+
+// Inflight 返回该凭证当前在途占用, 单位为真实槽数(0.5 步进, 可能出现 1.5)。
+func (slots *CredentialSlots) Inflight(id uint) int64 {
+	return slots.inflightUnits(id) / slots.scale
+}
+
+// inflightUnits 返回内部半槽单位的在途占用。
+func (slots *CredentialSlots) inflightUnits(id uint) int64 {
+	if slots == nil {
+		return 0
+	}
+	slots.mu.RLock()
+	counter := slots.counters[id]
+	slots.mu.RUnlock()
+	if counter == nil {
+		return 0
+	}
+	return counter.Load()
 }
 
 func (slots *CredentialSlots) counter(id uint) *atomic.Int64 {
@@ -128,7 +160,7 @@ func (slots *CredentialSlots) broadcastLocked() {
 	slots.notify = make(chan struct{})
 }
 
-// normalizeSlotWeight 权重下限 1, 防御 0/负值造成的计数不增。
+// normalizeSlotWeight 半槽单位下限 1, 防御 0/负值造成的计数不增。
 func normalizeSlotWeight(weight int64) int64 {
 	if weight < 1 {
 		return 1
@@ -326,21 +358,7 @@ func (slots *CredentialSlots) Release(id uint, weight int64) {
 	}
 }
 
-// Inflight 返回该凭证当前在途占用(加权槽位数, 非请求数)。
-func (slots *CredentialSlots) Inflight(id uint) int64 {
-	if slots == nil {
-		return 0
-	}
-	slots.mu.RLock()
-	counter := slots.counters[id]
-	slots.mu.RUnlock()
-	if counter == nil {
-		return 0
-	}
-	return counter.Load()
-}
-
-// Available 报告该凭证是否有容纳 weight 的空闲额度, 供调度器过滤候选。
+// Available 报告该凭证是否有容纳 weight(半槽单位)的空闲额度, 供调度器过滤候选。
 func (slots *CredentialSlots) Available(id uint, weight int64) bool {
 	if slots == nil {
 		return true
@@ -349,5 +367,5 @@ func (slots *CredentialSlots) Available(id uint, weight int64) bool {
 	if limit <= 0 {
 		return true
 	}
-	return slots.Inflight(id)+normalizeSlotWeight(weight) <= limit
+	return slots.inflightUnits(id)+normalizeSlotWeight(weight) <= limit
 }

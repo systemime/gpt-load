@@ -8,7 +8,7 @@ import (
 
 // 全池在途满载判定: 任一空闲即 false, 全满(跳过零引用)才 true, 空集恒 false。
 func TestHandlerAllowedCredentialsAllAtCapacity(t *testing.T) {
-	slots := state.NewCredentialSlots(0)
+	slots := state.NewCredentialSlotsWithScale(1, 1)
 	slots.Configure(1)
 	handler := &Handler{credentialSlots: slots}
 	refs := map[uint]state.CredentialRef{

@@ -54,6 +54,7 @@ import SettingsHeadersEditor from './SettingsHeadersEditor.vue'
 import SettingsNumberField from './SettingsNumberField.vue'
 import SettingsSystemInfo from './SettingsSystemInfo.vue'
 import ErrorRulesEditor from '../config/ErrorRulesEditor.vue'
+import ModelQuotaWeightsEditor from '../config/ModelQuotaWeightsEditor.vue'
 import type { HeaderSetting } from './settings-draft'
 import { useSettingsEditor } from './use-settings-editor'
 
@@ -66,7 +67,13 @@ const liveOptions = computed(() =>
 )
 const redactionInvalid = ref(false)
 const errorRulesPending = ref(false)
+const quotaWeightsValid = ref(true)
 const errorRulesEditor = ref<InstanceType<typeof ErrorRulesEditor>>()
+const quotaWeightsEditor = ref<InstanceType<typeof ModelQuotaWeightsEditor>>()
+function quotaWeightsRef(editor: unknown): void {
+  quotaWeightsEditor.value =
+    (editor as InstanceType<typeof ModelQuotaWeightsEditor> | null) ?? undefined
+}
 const redactionEditor = ref<InstanceType<typeof RequestRedactionEditor>>()
 const autoModelEditor = ref<InstanceType<typeof AutoModelEditor>>()
 const auditEditor = ref<InstanceType<typeof RequestAuditEditor>>()
@@ -87,7 +94,12 @@ const {
   undoRestore,
   discard,
   save,
-} = useSettingsEditor(() => (errorRulesPending.value ? ['error_rules'] : []))
+} = useSettingsEditor(() => {
+  const pending: SettingKey[] = []
+  if (errorRulesPending.value) pending.push('error_rules')
+  if (!quotaWeightsValid.value) pending.push('model_quota_weights')
+  return pending
+})
 const redactionBlocksSave = computed(
   () =>
     redactionInvalid.value &&
@@ -120,6 +132,7 @@ const sectionFields: Record<SectionID, readonly SettingKey[]> = {
     'credential_queue_timeout',
     'credential_usage_balance_enabled',
     'error_rules',
+    'model_quota_weights',
   ],
   connection: [
     'global_concurrency_limit',
@@ -212,7 +225,7 @@ function matches(key: SettingKey): boolean {
   const section = sectionIDs.find((id) => sectionFields[id].includes(key))!
   const text = [
     key,
-    key === 'error_rules' ? t('errorRules.title') : t('settingsForm.fields.' + key),
+    key === 'error_rules' ? t('errorRules.title') : key === 'model_quota_weights' ? t('modelQuota.title') : t('settingsForm.fields.' + key),
     key === 'error_rules'
       ? [t('errorRules.statuses'), t('errorRules.keywords')].join(' ')
       : t('settingsForm.hints.' + key),
@@ -280,8 +293,18 @@ function settingState(key: SettingKey) {
 function settingItem(key: SettingKey) {
   return {
     ...settingState(key),
-    label: key === 'error_rules' ? t('errorRules.title') : t('settingsForm.fields.' + key),
-    hint: key === 'error_rules' ? t('errorRules.order') : t('settingsForm.hints.' + key),
+    label:
+      key === 'error_rules'
+        ? t('errorRules.title')
+        : key === 'model_quota_weights'
+          ? t('modelQuota.title')
+          : t('settingsForm.fields.' + key),
+    hint:
+      key === 'error_rules'
+        ? t('errorRules.order')
+        : key === 'model_quota_weights'
+          ? t('modelQuota.settingsHint')
+          : t('settingsForm.hints.' + key),
     controlId: 'settings-' + key,
   }
 }
@@ -680,6 +703,25 @@ onScopeDispose(() => {
                   :disabled="disabled('error_rules') || resets.has('error_rules')"
                   :readonly="locked('error_rules')"
                   @update:pending="errorRulesPending = $event"
+                />
+              </SettingItem>
+              <SettingItem
+                v-if="matches('model_quota_weights')"
+                v-bind="settingItem('model_quota_weights')"
+                :add-label="t('modelQuota.add')"
+                :add-disabled="disabled('model_quota_weights') || resets.has('model_quota_weights')"
+                class="modern-settings-block"
+                stacked
+                @reset="restore('model_quota_weights')"
+                @undo="undoRestore('model_quota_weights')"
+                @add="quotaWeightsEditor?.add()"
+              >
+                <ModelQuotaWeightsEditor
+                  :ref="quotaWeightsRef"
+                  v-model="draft.model_quota_weights"
+                  :disabled="disabled('model_quota_weights') || resets.has('model_quota_weights')"
+                  :readonly="locked('model_quota_weights')"
+                  @update:valid="quotaWeightsValid = $event"
                 />
               </SettingItem>
             </template>

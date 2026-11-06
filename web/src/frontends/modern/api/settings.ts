@@ -81,12 +81,23 @@ export type SettingsValues = Record<SettingNumber, number> &
     request_redaction: RedactionRule[]
     request_audit: AuditConfig
     error_rules: ErrorRule[]
+    model_quota_weights: Record<string, number>
   }
 export type SettingKey = keyof SettingsValues
 export const glmCodingPlans = ['standard', 'premium'] as const
+export const modelQuotaWeights = ['0.5', '1', '1.5', '2', '2.5', '3'] as const
+
+function readModelQuotaWeights(value: unknown): Record<string, number> {
+  const result: Record<string, number> = {}
+  for (const [model, weight] of Object.entries(record(value ?? {}))) {
+    result[model] = Number(weight)
+  }
+  return result
+}
 export type GlmCodingPlan = (typeof glmCodingPlans)[number]
 export const settingKeys: readonly SettingKey[] = [
   'error_rules',
+  'model_quota_weights',
   'codex_live_mode',
   'route_strategy',
   'glm_coding_plan',
@@ -183,6 +194,7 @@ function readSettings(value: unknown): SettingsData {
     requestAuditPreset: readAudit(row.request_audit_preset),
     values: {
       error_rules: readErrorRules(values.error_rules ?? []),
+      model_quota_weights: readModelQuotaWeights(values.model_quota_weights),
       ...numbers,
       ...switches,
       codex_live_mode: oneOf(values.codex_live_mode, codexLiveModes),

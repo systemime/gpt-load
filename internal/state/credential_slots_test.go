@@ -7,7 +7,7 @@ import (
 )
 
 func TestCredentialSlotsAdmitUpToCapacity(t *testing.T) {
-	slots := NewCredentialSlots(2)
+	slots := NewCredentialSlotsWithScale(2, 1)
 	if !slots.TryAcquire(1, 1) || !slots.TryAcquire(1, 1) {
 		t.Fatal("first two acquires should succeed")
 	}
@@ -24,7 +24,7 @@ func TestCredentialSlotsAdmitUpToCapacity(t *testing.T) {
 }
 
 func TestCredentialSlotsUnlimitedWhenCapacityZero(t *testing.T) {
-	slots := NewCredentialSlots(0)
+	slots := NewCredentialSlotsWithScale(0, 1)
 	for i := 0; i < 100; i++ {
 		if !slots.TryAcquire(7, 1) {
 			t.Fatalf("acquire %d failed under unlimited capacity", i)
@@ -36,7 +36,7 @@ func TestCredentialSlotsUnlimitedWhenCapacityZero(t *testing.T) {
 }
 
 func TestCredentialSlotsIndependentPerCredential(t *testing.T) {
-	slots := NewCredentialSlots(1)
+	slots := NewCredentialSlotsWithScale(1, 1)
 	if !slots.TryAcquire(1, 1) {
 		t.Fatal("credential 1 acquire failed")
 	}
@@ -46,7 +46,7 @@ func TestCredentialSlotsIndependentPerCredential(t *testing.T) {
 }
 
 func TestCredentialSlotsConfigureAppliesImmediately(t *testing.T) {
-	slots := NewCredentialSlots(1)
+	slots := NewCredentialSlotsWithScale(1, 1)
 	if !slots.TryAcquire(1, 1) || slots.TryAcquire(1, 1) {
 		t.Fatal("capacity 1 behavior unexpected")
 	}
@@ -64,7 +64,7 @@ func TestCredentialSlotsConfigureAppliesImmediately(t *testing.T) {
 }
 
 func TestCredentialSlotsReleaseNeverGoesNegative(t *testing.T) {
-	slots := NewCredentialSlots(2)
+	slots := NewCredentialSlotsWithScale(2, 1)
 	slots.Release(1, 1)
 	slots.Release(1, 1)
 	if !slots.TryAcquire(1, 1) || !slots.TryAcquire(1, 1) || slots.TryAcquire(1, 1) {
@@ -73,7 +73,7 @@ func TestCredentialSlotsReleaseNeverGoesNegative(t *testing.T) {
 }
 
 func TestCredentialSlotsConcurrentAcquireRespectsCapacity(t *testing.T) {
-	slots := NewCredentialSlots(8)
+	slots := NewCredentialSlotsWithScale(8, 1)
 	var acquired sync.WaitGroup
 	var mu sync.Mutex
 	granted := 0
@@ -95,7 +95,7 @@ func TestCredentialSlotsConcurrentAcquireRespectsCapacity(t *testing.T) {
 }
 
 func TestCredentialSlotsAcquireWithinWaitWakesOnRelease(t *testing.T) {
-	slots := NewCredentialSlots(1)
+	slots := NewCredentialSlotsWithScale(1, 1)
 	if !slots.TryAcquireWithin(3, 1, 3) || !slots.TryAcquireWithin(3, 1, 3) || !slots.TryAcquireWithin(3, 1, 3) {
 		t.Fatal("fill budget failed")
 	}
@@ -127,7 +127,7 @@ func TestCredentialSlotsAcquireWithinWaitWakesOnRelease(t *testing.T) {
 }
 
 func TestCredentialSlotsAcquireWithinWaitTimesOut(t *testing.T) {
-	slots := NewCredentialSlots(4)
+	slots := NewCredentialSlotsWithScale(4, 1)
 	if !slots.TryAcquireWithin(5, 1, 2) || !slots.TryAcquireWithin(5, 1, 2) {
 		t.Fatal("fill budget failed")
 	}
@@ -144,7 +144,7 @@ func TestCredentialSlotsAcquireWithinWaitTimesOut(t *testing.T) {
 }
 
 func TestCredentialSlotsAcquireWithinWaitHonorsDone(t *testing.T) {
-	slots := NewCredentialSlots(1)
+	slots := NewCredentialSlotsWithScale(1, 1)
 	slots.TryAcquire(7, 1)
 	done := make(chan struct{})
 	close(done)
@@ -154,7 +154,7 @@ func TestCredentialSlotsAcquireWithinWaitHonorsDone(t *testing.T) {
 }
 
 func TestCredentialSlotsAcquireAnyWithinWakesOnOtherKeyRelease(t *testing.T) {
-	slots := NewCredentialSlots(1)
+	slots := NewCredentialSlotsWithScale(1, 1)
 	// 预算 3: 两个凭证都填满到预算。
 	for i := 0; i < 3; i++ {
 		slots.TryAcquireWithin(11, 1, 3)
@@ -185,8 +185,8 @@ func TestCredentialSlotsAcquireAnyWithinWakesOnOtherKeyRelease(t *testing.T) {
 }
 
 func TestCredentialSlotsAcquireAnyWithinPrefersPreferredWhenFree(t *testing.T) {
-	slots := NewCredentialSlots(1) // 预算 = 1+2 = 3
-	slots.TryAcquire(11, 1)        // 11 在途 1, 12 在途 0
+	slots := NewCredentialSlotsWithScale(1, 1) // 预算 = 1+2 = 3
+	slots.TryAcquire(11, 1)                    // 11 在途 1, 12 在途 0
 	id, ok := slots.AcquireAnyWithin([]uint{12, 11}, 11, 1, time.Second, nil)
 	if !ok || id != 11 {
 		t.Fatalf("acquired = (%d, %v), want preferred 11", id, ok)
@@ -202,7 +202,7 @@ func TestCredentialSlotsAcquireAnyWithinPrefersPreferredWhenFree(t *testing.T) {
 }
 
 func TestCredentialSlotsPerCredentialLimitOverridesGlobal(t *testing.T) {
-	slots := NewCredentialSlots(4)
+	slots := NewCredentialSlotsWithScale(4, 1)
 	slots.SetLimits(map[uint]int64{11: 2})
 	if !slots.TryAcquire(11, 1) || !slots.TryAcquire(11, 1) {
 		t.Fatal("override cap 2 should admit two")

@@ -30,6 +30,17 @@ import { zhCN as subscriptions } from './subscriptions'
 export default {
   credentialBatchTest: credentialTestMessages['zh-CN'],
   errorRules: errorRuleMessages['zh-CN'],
+  modelQuota: {
+    title: '模型并发占用倍率',
+    model: '模型',
+    weight: '占用槽数',
+    add: '加一条',
+    remove: '删除',
+    empty: '暂无条目。添加后命中该模型的请求将按倍率占用并发槽位。',
+    invalidModel: '模型名必填且不能重复',
+    invalidRows: '存在未填完或重复的条目',
+    settingsHint: '调整模型请求占用的并发槽数（0.5–3，步进 0.5），保存后即时生效',
+  },
   proxies,
   concurrency,
   requestRedaction,

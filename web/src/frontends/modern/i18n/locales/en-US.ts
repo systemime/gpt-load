@@ -30,6 +30,17 @@ import { enUS as subscriptions } from './subscriptions'
 export default {
   credentialBatchTest: credentialTestMessages['en-US'],
   errorRules: errorRuleMessages['en-US'],
+  modelQuota: {
+    title: 'Model slot weight',
+    model: 'Model',
+    weight: 'Slots occupied',
+    add: 'Add entry',
+    remove: 'Remove',
+    empty: 'No entries. Requests for listed models occupy slots by the weight.',
+    invalidModel: 'Model name is required and must be unique',
+    invalidRows: 'Incomplete or duplicate entries',
+    settingsHint: 'Adjust how many slots each model request occupies (0.5–3, steps of 0.5); applies on save',
+  },
   proxies,
   concurrency,
   requestRedaction,

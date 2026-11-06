@@ -187,8 +187,11 @@ func parseModelQuotaWeights(key string, value any) (map[string]float64, error) {
 		if err != nil {
 			return nil, err
 		}
-		if weight > maxModelQuotaWeight {
-			return nil, fmt.Errorf("%s: weight for %q must be at most %d", key, name, maxModelQuotaWeight)
+		if weight < minModelQuotaWeight || weight > maxModelQuotaWeight {
+			return nil, fmt.Errorf("%s: weight for %q must be between %v and %v", key, name, minModelQuotaWeight, maxModelQuotaWeight)
+		}
+		if weight*2 != math.Trunc(weight*2) {
+			return nil, fmt.Errorf("%s: weight for %q must be a multiple of 0.5", key, name)
 		}
 		weights[name] = weight
 	}
@@ -238,14 +241,17 @@ const (
 	defaultCredentialConcurrencyLimit = 6
 	MaxCredentialConcurrencyLimit     = 64
 	// CredentialQueueSlack 是组预算浮动: 全池达 cap 后每凭证最多再放行这么多, 超出进入排队。
-	CredentialQueueSlack          = 2
+	CredentialQueueSlack = 2
+	// SlotUnitScale 是槽位记账的最小单位: 2 表示半槽步进, 模型倍率 1.5 占 3 单位。
+	SlotUnitScale                 = 2
 	minCredentialQueueTimeout     = 1
 	maxCredentialQueueTimeout     = 600
 	defaultCredentialQueueTimeout = 30
 	maxJSONSafeInteger            = int64(1<<53 - 1)
 	maxJSONSafeFloat              = float64(1<<53 - 1)
 	maxModelQuotaWeightEntries    = 128
-	maxModelQuotaWeight           = 10_000
+	minModelQuotaWeight           = 0.5
+	maxModelQuotaWeight           = 3
 	maxPlanQuotaEntries           = 64
 )
 

@@ -9,8 +9,9 @@ var ModelQuotaWeights = map[string]float64{
 	"glm-5.3": 2.0,
 }
 
-// SlotWeight 返回该模型单个请求占用的并发槽位数(≥1)。
+// SlotWeight 返回该模型单个请求占用的并发槽位单位数(半槽单位, ≥1)。
 // 以客户端请求的模型名判定: 准入过滤发生在上游模型解析之前。
+// 倍率 1 → 2 单位, 1.5 → 3, 2 → 4, 3 → 6(槽位记账的最小单位为半槽)。
 func SlotWeight(modelName string) int64 {
 	return SlotWeightIn(nil, modelName)
 }
@@ -19,20 +20,20 @@ func SlotWeight(modelName string) int64 {
 // 权重表来自 ConfigSnapshot.ModelQuotaWeights(编译期已合并内置与设置覆盖)。
 func SlotWeightIn(weights map[string]float64, modelName string) int64 {
 	if modelName == "" {
-		return 1
+		return SlotUnitScale
 	}
 	if weights == nil {
 		weights = ModelQuotaWeights
 	}
 	weight, ok := weights[modelName]
-	if !ok || weight <= 1 {
+	if !ok || weight <= 0 {
+		return SlotUnitScale
+	}
+	units := int64(math.Round(weight * float64(SlotUnitScale)))
+	if units < 1 {
 		return 1
 	}
-	slots := int64(math.Ceil(weight))
-	if slots < 1 {
-		return 1
-	}
-	return slots
+	return units
 }
 
 // EffectiveModelQuotaWeights 合并内置默认表与设置覆盖(同名模型以设置为准)。

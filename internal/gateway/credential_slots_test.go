@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"gpt-load/internal/state"
 )
 
 // cap=1 且凭证 1 已占满时, 新请求必须溢出到另一凭证;
@@ -18,6 +20,7 @@ func TestHandlerOverflowsCredentialAtConcurrencyCapAndRelearnsAffinity(t *testin
 
 	snapshot := manager.Current()
 	snapshot.Settings.CredentialConcurrencyLimit = 1
+	handler.credentialSlots = state.NewCredentialSlotsWithScale(1, 1)
 	handler.credentialSlots.Configure(1)
 
 	if !handler.credentialSlots.TryAcquire(1, 1) {
@@ -41,6 +44,7 @@ func TestHandlerServesWhenAllCredentialsCapped(t *testing.T) {
 
 	snapshot := manager.Current()
 	snapshot.Settings.CredentialConcurrencyLimit = 1
+	handler.credentialSlots = state.NewCredentialSlotsWithScale(1, 1)
 	handler.credentialSlots.Configure(1)
 	handler.credentialSlots.TryAcquire(1, 1)
 	handler.credentialSlots.TryAcquire(2, 1)
@@ -60,6 +64,7 @@ func TestHandlerQueuesBeyondCapWithinGroupBudget(t *testing.T) {
 
 	snapshot := manager.Current()
 	snapshot.Settings.CredentialConcurrencyLimit = 1
+	handler.credentialSlots = state.NewCredentialSlotsWithScale(1, 1)
 	handler.credentialSlots.Configure(1)
 	handler.credentialSlots.TryAcquire(1, 1)
 	handler.credentialSlots.TryAcquire(2, 1)
@@ -80,6 +85,7 @@ func TestHandlerQueueTimeoutReturns429(t *testing.T) {
 	snapshot := manager.Current()
 	snapshot.Settings.CredentialConcurrencyLimit = 1
 	snapshot.Settings.CredentialQueueTimeout = 50 * time.Millisecond
+	handler.credentialSlots = state.NewCredentialSlotsWithScale(1, 1)
 	handler.credentialSlots.Configure(1)
 	// 预算 = cap(1) + slack(2) = 3: 把两个凭证都填满到预算。
 	for i := 0; i < 3; i++ {
@@ -116,6 +122,7 @@ func TestHandlerBudgetTierRequeuesOnlyWhenAllKeysAtBudget(t *testing.T) {
 	snapshot := manager.Current()
 	snapshot.Settings.CredentialConcurrencyLimit = 1
 	snapshot.Settings.CredentialQueueTimeout = 5 * time.Second
+	handler.credentialSlots = state.NewCredentialSlotsWithScale(1, 1)
 	handler.credentialSlots.Configure(1)
 	// 凭证 1 填满到预算(3), 凭证 2 只在 cap(1): 公平序会选 1, 但 2 有预算内空位。
 	for i := 0; i < 3; i++ {
@@ -140,6 +147,7 @@ func TestHandlerQueueWakesOnOtherKeyReleaseAndRepicks(t *testing.T) {
 	snapshot := manager.Current()
 	snapshot.Settings.CredentialConcurrencyLimit = 1
 	snapshot.Settings.CredentialQueueTimeout = 5 * time.Second
+	handler.credentialSlots = state.NewCredentialSlotsWithScale(1, 1)
 	handler.credentialSlots.Configure(1)
 	for i := 0; i < 3; i++ {
 		handler.credentialSlots.TryAcquireWithin(1, 1, 3)
@@ -155,7 +163,8 @@ func TestHandlerQueueWakesOnOtherKeyReleaseAndRepicks(t *testing.T) {
 		for handler.credentialSlots.Waiting(2) == 0 && time.Now().Before(deadline) {
 			time.Sleep(time.Millisecond)
 		}
-		handler.credentialSlots.Release(2, 1)
+		// 排队请求权重 2 单位(半槽记账下 weight-1 模型), 释放等量单位即可唤醒容纳。
+		handler.credentialSlots.Release(2, 2)
 	}()
 	serveAffinityRequest(t, engine, `{"model":"gpt-4o","messages":[{"role":"user","content":"queued repick"}]}`)
 	<-done

@@ -201,6 +201,7 @@ func excludeHighLoadCredentials(iterator *Iterator, eligible []weightedCredentia
 		limit := iterator.credentialSlots.EffectiveLimit(id)
 		if limit < 3 || iterator.credentialSlots.Inflight(id) <= limit-2 {
 			// cap<=2 时 cap-2 无实际容量意义, 视为未高载。
+			// Inflight/EffectiveLimit 已换算回真实槽数(0.5 步进), 阈值语义不变。
 			relaxed = append(relaxed, candidate)
 		}
 	}

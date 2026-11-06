@@ -10,13 +10,17 @@ import (
 )
 
 func TestSlotWeightExactModelMatch(t *testing.T) {
-	if SlotWeight("glm-5.3") != 2 {
-		t.Fatal("glm-5.3 should occupy two slots")
+	// 半槽单位: 倍率 2 → 4 单位; 倍率 1 → 2 单位。
+	if SlotWeight("glm-5.3") != 4 {
+		t.Fatal("glm-5.3 (weight 2) should occupy 4 units (two slots)")
 	}
 	for _, name := range []string{"glm-5.3-flash", "GLM-5.3", "glm-4.7", "", "unknown"} {
-		if SlotWeight(name) != 1 {
-			t.Fatalf("SlotWeight(%q) should be 1 (exact match only)", name)
+		if SlotWeight(name) != 2 {
+			t.Fatalf("SlotWeight(%q) should be 2 units (one slot, exact match only)", name)
 		}
+	}
+	if SlotWeightIn(map[string]float64{"glm-5.3": 1.5}, "glm-5.3") != 3 {
+		t.Fatal("weight 1.5 should occupy 3 units")
 	}
 }
 
@@ -34,11 +38,11 @@ func TestEffectiveModelQuotaWeightsMergesOverrides(t *testing.T) {
 	if EffectiveModelQuotaWeights(nil)["glm-5.3"] != 2 {
 		t.Fatal("nil custom should fall back to builtin table")
 	}
-	if SlotWeightIn(merged, "gpt-5.5") != 2 {
-		t.Fatal("1.5 weight should ceil to 2 slots")
+	if SlotWeightIn(merged, "gpt-5.5") != 3 {
+		t.Fatal("1.5 weight should be 3 units")
 	}
-	if SlotWeightIn(nil, "unknown") != 1 {
-		t.Fatal("nil table should fall back to builtin (unknown = 1)")
+	if SlotWeightIn(nil, "unknown") != 2 {
+		t.Fatal("nil table should fall back to builtin (unknown = 2 units)")
 	}
 }
 
@@ -116,37 +120,39 @@ func TestSnapshotPlanQuotaCreditsOverride(t *testing.T) {
 }
 
 func TestCredentialSlotsWeightedAdmission(t *testing.T) {
+	// 生产口径: cap 6 = 12 半槽单位; glm-5.3 倍率 2 = 4 单位, 恰好容纳 3 个请求。
 	slots := NewCredentialSlots(6)
+	w := SlotWeight("glm-5.3")
 	for i := 0; i < 3; i++ {
-		if !slots.TryAcquire(1, SlotWeight("glm-5.3")) {
-			t.Fatalf("weighted acquire %d should fit (3x2=6)", i)
+		if !slots.TryAcquire(1, w) {
+			t.Fatalf("weighted acquire %d should fit (3x4=12)", i)
 		}
 	}
-	if slots.TryAcquire(1, 2) {
+	if slots.TryAcquire(1, w) {
 		t.Fatal("fourth weighted request exceeds cap 6")
 	}
 	if slots.Inflight(1) != 6 {
-		t.Fatalf("Inflight = %d, want 6 weighted units", slots.Inflight(1))
+		t.Fatalf("Inflight = %d, want 6 real slots (12 units)", slots.Inflight(1))
 	}
 	// 轻模型仍无空位: 剩余额度 0。
-	if slots.Available(1, 1) {
+	if slots.Available(1, SlotWeightIn(nil, "glm-5.3-flash")) {
 		t.Fatal("no unit should remain after three weighted requests")
 	}
-	slots.Release(1, 2)
-	if !slots.Available(1, 2) || slots.Available(1, 3) {
-		t.Fatal("freed 2 units: weight-2 fits, weight-3 does not")
+	slots.Release(1, w)
+	if !slots.Available(1, w) || slots.Available(1, w+2) {
+		t.Fatal("freed 4 units: same weight fits, larger does not")
 	}
-	if !slots.TryAcquire(1, 1) {
-		t.Fatal("single-unit request should fit in 2 freed units")
+	if !slots.TryAcquire(1, SlotUnitScale) {
+		t.Fatal("half-slot request should fit in freed 4 units")
 	}
-	if slots.TryAcquire(1, 2) {
-		t.Fatal("only 1 unit remains after mixed fill")
+	if slots.TryAcquire(1, w) {
+		t.Fatal("only 2 units remain after half-slot fill")
 	}
 	// 权重配对错误只钳制到 0, 不产生负数。
-	slots.Release(1, 2)
-	slots.Release(1, 2)
-	slots.Release(1, 2)
-	slots.Release(1, 2)
+	slots.Release(1, w)
+	slots.Release(1, w)
+	slots.Release(1, w)
+	slots.Release(1, w)
 	if slots.Inflight(1) != 0 {
 		t.Fatalf("Inflight = %d after over-release, want 0", slots.Inflight(1))
 	}
