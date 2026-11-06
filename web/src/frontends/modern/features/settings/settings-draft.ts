@@ -368,6 +368,13 @@ export function buildSettingsPatch(
         ),
         remove: draft[key].filter((row) => row.action === 'remove').map((row) => row.name.trim()),
       }
+    } else if (key === 'model_quota_weights') {
+      // 后端只接受 {模型: 倍率} 对象; 空表提交 null 表示恢复内置表。
+      patch[key] = draft.model_quota_weights.length
+        ? Object.fromEntries(
+            draft.model_quota_weights.map((row) => [row.model.trim(), Number(row.weight)]),
+          )
+        : null
     } else if (key === 'auto_model') patch[key] = autoModelValue(draft.auto_model)
     else if (key === 'cors') patch[key] = corsValue(draft.cors)
     else if (key === 'proxy_config') {
